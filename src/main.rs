@@ -1,0 +1,166 @@
+use std::io;
+use std::path::PathBuf;
+
+use clap::{Parser, Subcommand};
+use fast_mvt::proto::GeomType;
+use fast_mvt::{MvtGeometry, MvtReaderRef, MvtResult, MvtValueRef};
+use geo_types::{Coord, LineString, MultiLineString, MultiPoint, MultiPolygon, Point, Polygon};
+
+#[derive(Debug, Parser)]
+#[command(author, version, about)]
+struct Cli {
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Debug, Subcommand)]
+enum Command {
+    /// Dump a vector tile in a human-readable form.
+    Dump {
+        /// MVT file to dump.
+        file: PathBuf,
+    },
+}
+
+fn main() -> MvtResult<()> {
+    run(Cli::parse())
+}
+
+fn run(cli: Cli) -> MvtResult<()> {
+    match cli.command {
+        Command::Dump { file } => dump_file(file),
+    }
+}
+
+fn dump_file(file: PathBuf) -> MvtResult<()> {
+    let data = std::fs::read(file)?;
+    let reader = MvtReaderRef::new(&data)?;
+    let stdout = io::stdout();
+    let mut out = io::BufWriter::new(stdout.lock());
+    dump_reader(&reader, &mut out)
+}
+
+fn dump_reader(writer: &MvtReaderRef<'_>, out: &mut impl io::Write) -> MvtResult<()> {
+    for (layer_index, layer) in writer.layers().enumerate() {
+        writeln!(
+            out,
+            "============================================================="
+        )?;
+        writeln!(out, "layer: {layer_index}")?;
+        writeln!(out, "  name: {}", layer.name())?;
+        writeln!(out, "  version: {}", layer.version())?;
+        writeln!(out, "  extent: {}", layer.extent())?;
+
+        for (feature_index, feature) in layer.features().enumerate() {
+            writeln!(out, "  feature: {feature_index}")?;
+            write!(out, "    id: ")?;
+            match feature.id() {
+                Some(id) => writeln!(out, "{id}")?,
+                None => writeln!(out, "(none)")?,
+            }
+            let geom_type = format_geom_type(feature.geom_type());
+            writeln!(out, "    geomtype: {geom_type}")?;
+            writeln!(out, "    geometry:")?;
+            write_geometry(out, &feature.geometry()?)?;
+            writeln!(out, "    properties:")?;
+            for property in feature.properties() {
+                let (key, value) = property?;
+                writeln!(out, "      {key}={}", format_value(value))?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn format_geom_type(value: Option<GeomType>) -> &'static str {
+    match value {
+        Some(GeomType::Point) => "point",
+        Some(GeomType::Linestring) => "linestring",
+        Some(GeomType::Polygon) => "polygon",
+        Some(GeomType::Unknown) | None => "unknown",
+    }
+}
+
+fn format_value(value: MvtValueRef<'_>) -> String {
+    match value {
+        MvtValueRef::String(value) => format!("{value:?}"),
+        MvtValueRef::Float(value) => value.to_string(),
+        MvtValueRef::Double(value) => value.to_string(),
+        MvtValueRef::Int(value) | MvtValueRef::SInt(value) => value.to_string(),
+        MvtValueRef::UInt(value) => value.to_string(),
+        MvtValueRef::Bool(value) => value.to_string(),
+        MvtValueRef::Null => "null".to_string(),
+    }
+}
+
+fn write_geometry(out: &mut impl io::Write, geometry: &MvtGeometry) -> io::Result<()> {
+    match geometry {
+        MvtGeometry::Point(point) => write_point(out, *point),
+        MvtGeometry::MultiPoint(points) => write_points(out, points),
+        MvtGeometry::LineString(line) => write_line(out, line),
+        MvtGeometry::MultiLineString(lines) => write_lines(out, lines),
+        MvtGeometry::Polygon(polygon) => write_polygon(out, polygon),
+        MvtGeometry::MultiPolygon(polygons) => write_polygons(out, polygons),
+        geometry => writeln!(out, "      {geometry:?}"),
+    }
+}
+
+fn write_point(out: &mut impl io::Write, point: Point<i32>) -> io::Result<()> {
+    writeln!(out, "      POINT({},{})", point.x(), point.y())
+}
+
+fn write_points(out: &mut impl io::Write, points: &MultiPoint<i32>) -> io::Result<()> {
+    for point in points {
+        write_point(out, *point)?;
+    }
+    Ok(())
+}
+
+fn write_line(out: &mut impl io::Write, line: &LineString<i32>) -> io::Result<()> {
+    let count = line.0.len();
+    let coords = format_coords(&line.0);
+    writeln!(out, "      LINESTRING[count={count}]({coords})")
+}
+
+fn write_lines(out: &mut impl io::Write, lines: &MultiLineString<i32>) -> io::Result<()> {
+    for line in lines {
+        write_line(out, line)?;
+    }
+    Ok(())
+}
+
+fn write_polygon(out: &mut impl io::Write, polygon: &Polygon<i32>) -> io::Result<()> {
+    write_ring(out, polygon.exterior(), "OUTER")?;
+    for ring in polygon.interiors() {
+        write_ring(out, ring, "INNER")?;
+    }
+    Ok(())
+}
+
+fn write_polygons(out: &mut impl io::Write, polygons: &MultiPolygon<i32>) -> io::Result<()> {
+    for polygon in polygons {
+        write_polygon(out, polygon)?;
+    }
+    Ok(())
+}
+
+fn write_ring(
+    out: &mut impl io::Write,
+    ring: &LineString<i32>,
+    winding: &'static str,
+) -> io::Result<()> {
+    writeln!(
+        out,
+        "      RING[count={}]({})[{winding}]",
+        ring.0.len(),
+        format_coords(&ring.0)
+    )
+}
+
+fn format_coords(coords: &[Coord<i32>]) -> String {
+    coords
+        .iter()
+        .map(|coord| format!("{} {}", coord.x, coord.y))
+        .collect::<Vec<_>>()
+        .join(",")
+}

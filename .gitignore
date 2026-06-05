@@ -1,0 +1,14 @@
+**/*.rs.bk
+*.pdb
+.idea/
+.vscode/
+debug/
+flamegraph*.svg
+perf.data*
+target/
+temp/
+tmp/
+venv/
+
+# This is a library, no lock
+Cargo.lock
