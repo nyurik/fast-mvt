@@ -9,7 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.1](https://github.com/nyurik/fast-mvt/compare/v0.1.0...v0.1.1) - 2026-06-06
 
-### Other
-
 - update readme
 - format Cargo.toml, readme fixes ([#2](https://github.com/nyurik/fast-mvt/pull/2))
+
+## 0.1.0 - 2026-06-06
+
+- initial release

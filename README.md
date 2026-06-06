@@ -105,11 +105,8 @@ The generated protobuf files are checked in, so normal builds do not require
 
 The code was inspired by several open source MVT implementations:
 
-- `mvt` by the Minnesota Department of Transportation provided the encode-side
-  tile/layer/feature structure and MVT geometry command conformance tests.
-- `mvt-reader` by Paul Lange provided the checked-in codegen pattern,
-  layer metadata behavior, tag parsing validation, and decode-side geometry
-  structure.
+- Encoding and testing from `mvt` crate by the Minnesota Department of Transportation.
+- Decoding and testing from `mvt-reader` by Paul Lange.
 
 ## License
 
