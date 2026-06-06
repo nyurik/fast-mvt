@@ -37,7 +37,7 @@ fn empty_tile_round_trips() {
 #[test]
 fn owned_builder_api_encodes_like_mvt_crate_surface() {
     let tile = MvtTileBuilder::new();
-    let layer = tile.layer("layer");
+    let layer = tile.layer("layer").unwrap();
     let mut feature = layer.feature(Geometry::Point((1, 2).into())).unwrap();
     feature.id(Some(7));
     feature.tag_string("name", "place").unwrap();
@@ -53,11 +53,12 @@ fn owned_builder_api_encodes_like_mvt_crate_surface() {
     assert_eq!(layer.num_features(), 1);
 
     let tile = layer.finish();
-    let tile = tile.layer("layer").finish();
+    let tile = tile.layer("layer").unwrap().finish();
     assert!(!tile.finish().is_empty());
 
     let bytes = MvtTileBuilder::new()
         .layer("layer")
+        .unwrap()
         .feature(Geometry::Point((1, 2).into()))
         .unwrap()
         .finish()
@@ -114,4 +115,16 @@ fn ring_is_implicitly_closed() {
     };
     assert_eq!(poly.exterior().0.len(), 5);
     assert_eq!(poly.exterior().0.first(), poly.exterior().0.last());
+}
+
+#[test]
+fn owned_tile_encode_rejects_empty_layer_name() {
+    let tile = MvtTile {
+        layers: vec![MvtLayer::new("", DEFAULT_EXTENT)],
+    };
+
+    assert!(matches!(
+        tile.encode(),
+        Err(fast_mvt::MvtError::MissingLayerName)
+    ));
 }
