@@ -139,7 +139,7 @@ msrv:  (cargo-install 'cargo-msrv')
 
 # Compile the crate's default features using a dynamically generated minimal Cargo.lock
 [private]
-_check-msrv-default:  (cargo-install 'cargo-minimal-versions')
+_check-msrv-default:  (cargo-install 'cargo-minimal-versions') (cargo-install 'cargo-hack')
     cargo minimal-versions check --direct --package {{main_crate}}
 
 # Run cargo-release
@@ -190,11 +190,11 @@ assert-cmd command:
 [private]
 assert-git-is-clean:
     @if [ -n "$(git status --untracked-files --porcelain)" ]; then \
-      >&2 echo "ERROR: git repo is no longer clean. Make sure compilation and tests artifacts are in the .gitignore, and no repo files are modified." ;\
-      >&2 echo "######### git status ##########" ;\
-      git status ;\
-      git --no-pager diff ;\
-      exit 1 ;\
+        >&2 echo "ERROR: git repo is no longer clean. Make sure compilation and tests artifacts are in the .gitignore, and no repo files are modified." ;\
+        >&2 echo "######### git status ##########" ;\
+        git status ;\
+        git --no-pager diff ;\
+        exit 1 ;\
     fi
 
 # Check if a certain Cargo command is installed, and install it if needed
