@@ -323,14 +323,12 @@ impl std::hash::Hash for MvtValue {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    #[cfg(feature = "json")]
+#[cfg(all(test, feature = "json"))]
+mod tests_json {
     use serde_json::json;
 
     use super::*;
 
-    #[cfg(feature = "json")]
     #[test]
     fn mvt_values_convert_to_json_values() {
         assert_eq!(
@@ -360,7 +358,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "json")]
     #[test]
     fn json_values_convert_to_mvt_values() {
         assert_eq!(
