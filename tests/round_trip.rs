@@ -39,7 +39,7 @@ fn owned_builder_api_encodes_like_mvt_crate_surface() {
     let tile = MvtTileBuilder::new();
     let layer = tile.layer("layer");
     let mut feature = layer.feature(Geometry::Point((1, 2).into())).unwrap();
-    feature.id(7);
+    feature.id(Some(7));
     feature.tag_string("name", "place").unwrap();
     feature.tag_double("score", 1.5).unwrap();
     feature.tag_float("rank", 2.5).unwrap();
