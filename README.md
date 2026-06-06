@@ -1,6 +1,6 @@
 # fast-mvt
 
-[![GitHub repo](https://img.shields.io/badge/github-nyurik/fast-mvt-8da0cb?logo=github)](https://github.com/nyurik/fast-mvt)
+[![GitHub repo](https://img.shields.io/badge/github-nyurik/fast--mvt-8da0cb?logo=github)](https://github.com/nyurik/fast-mvt)
 [![crates.io version](https://img.shields.io/crates/v/fast-mvt)](https://crates.io/crates/fast-mvt)
 [![crate usage](https://img.shields.io/crates/d/fast-mvt)](https://crates.io/crates/fast-mvt)
 [![docs.rs status](https://img.shields.io/docsrs/fast-mvt)](https://docs.rs/fast-mvt)
