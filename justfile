@@ -139,7 +139,7 @@ msrv:  (cargo-install 'cargo-msrv')
 
 # Compile the crate's default features using a dynamically generated minimal Cargo.lock
 [private]
-_check-msrv-default:  (cargo-install 'cargo-minimal-versions')
+_check-msrv-default:  (cargo-install 'cargo-minimal-versions') (cargo-install 'cargo-hack')
     cargo minimal-versions check --direct --package {{main_crate}}
 
 # Run cargo-release
