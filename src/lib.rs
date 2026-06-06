@@ -26,12 +26,17 @@ mod generated;
 
 pub mod proto;
 
+#[cfg(feature = "json")]
+pub use serde_json;
+
 #[cfg(feature = "reader")]
 mod reader;
 #[cfg(feature = "reader")]
 pub use reader::{MvtFeatureRef, MvtLayerRef, MvtPropertyIter, MvtReaderRef, MvtValueRef};
 
 mod types;
+#[cfg(feature = "json")]
+pub use types::MvtJsonValueError;
 pub use types::{
     DEFAULT_EXTENT, MvtCoord, MvtExtent, MvtFeature, MvtGeometry, MvtLayer, MvtLineString,
     MvtMultiLineString, MvtMultiPoint, MvtMultiPolygon, MvtPoint, MvtPolygon, MvtTile, MvtValue,

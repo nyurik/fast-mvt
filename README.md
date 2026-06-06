@@ -86,7 +86,7 @@ multiple independently built layer buffers can be concatenated to form a tile.
 |-------------|-------------------------------------------------------------------------|
 | `reader`    | MVT tile decoding from bytes.                                           |
 | `writer`    | MVT tile encoding into bytes.                                           |
-| `json`      | Enable serde JSON support for the generated protobuf bindings.          |
+| `json`      | Enable serde JSON support.                                              |
 | `codegen`   | Regenerate checked-in protobuf bindings from `src/vector_tile.proto`.   |
 | `arbitrary` | Derive `arbitrary::Arbitrary` for generated protobuf types for fuzzing. |
 | `views`     | Internal feature, do not use. Must be here due to buffa limitations.    |
