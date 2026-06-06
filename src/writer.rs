@@ -23,8 +23,20 @@ impl MvtTileBuilder {
         })
     }
 
-    pub fn layer(self, name: impl Into<String>) -> MvtLayerBuilder {
-        MvtLayerBuilder::with_tile(self, name.into())
+    pub fn layer(self, name: impl Into<String>) -> MvtResult<MvtLayerBuilder> {
+        self.layer_with_capacity(name, 0)
+    }
+
+    pub fn layer_with_capacity(
+        self,
+        name: impl Into<String>,
+        features: usize,
+    ) -> MvtResult<MvtLayerBuilder> {
+        let name = name.into();
+        if name.is_empty() {
+            return Err(MvtError::MissingLayerName);
+        }
+        Ok(MvtLayerBuilder::with_tile(self, name, features))
     }
 
     #[must_use]
@@ -46,9 +58,8 @@ impl MvtTileBuilder {
 pub(crate) fn encode_tile(tile: MvtTile) -> MvtResult<Vec<u8>> {
     let mut tile_bld = MvtTileBuilder::with_capacity(tile.layers.len());
     for layer in tile.layers {
-        let mut layer_bld = tile_bld.layer(layer.name);
+        let mut layer_bld = tile_bld.layer_with_capacity(layer.name, layer.features.len())?;
         layer_bld.extent(layer.extent);
-        layer_bld.reserve_features(layer.features.len());
         for feature in layer.features {
             let mut feature_bld = layer_bld.feature(feature.geometry)?;
             feature_bld.id(feature.id);
@@ -71,13 +82,13 @@ pub struct MvtLayerBuilder {
 }
 
 impl MvtLayerBuilder {
-    fn with_tile(tile: MvtTileBuilder, name: String) -> Self {
+    fn with_tile(tile: MvtTileBuilder, name: String, features: usize) -> Self {
         Self {
             tile,
             layer: Layer {
                 version: 2,
                 name,
-                features: Vec::new(),
+                features: Vec::with_capacity(features),
                 keys: Vec::new(),
                 values: Vec::new(),
                 extent: Some(DEFAULT_EXTENT.get()),
@@ -89,11 +100,6 @@ impl MvtLayerBuilder {
 
     pub fn extent(&mut self, extent: MvtExtent) -> &mut Self {
         self.layer.extent = Some(extent.get());
-        self
-    }
-
-    pub fn reserve_features(&mut self, additional: usize) -> &mut Self {
-        self.layer.features.reserve(additional);
         self
     }
 
@@ -235,7 +241,7 @@ mod tests {
 
     #[test]
     fn layer_builder_deduplicates_keys_and_values() {
-        let layer = MvtTileBuilder::new().layer("layer");
+        let layer = MvtTileBuilder::new().layer("layer").unwrap();
         let mut feature = layer.feature(MvtGeometry::Point((1, 2).into())).unwrap();
         feature.tag("foo", MvtValue::String("bar".into())).unwrap();
         feature.tag("foo", MvtValue::String("baz".into())).unwrap();
@@ -254,7 +260,7 @@ mod tests {
     #[test]
     fn encode_appends_and_validates_tile_metadata() {
         let tile = MvtTileBuilder::new();
-        let layer = tile.layer("layer");
+        let layer = tile.layer("layer").unwrap();
         let mut feature = layer.feature(MvtGeometry::Point((1, 2).into())).unwrap();
         feature.id(Some(1));
         feature.tag("skip", MvtValue::Null).unwrap();
@@ -265,7 +271,7 @@ mod tests {
         assert!(proto.layers[0].features[0].tags.is_empty());
 
         let tile = MvtTileBuilder::new();
-        let layer = tile.layer("layer");
+        let layer = tile.layer("layer").unwrap();
         let mut feature = layer.feature(MvtGeometry::Point((1, 2).into())).unwrap();
         feature.id(Some(1));
         let layer = feature.finish();
@@ -275,9 +281,30 @@ mod tests {
         assert_eq!(out[0], 0xaa);
 
         let tile = MvtTileBuilder::new();
-        let tile = tile.layer("same").finish();
-        let tile = tile.layer("same").finish();
+        let tile = tile.layer("same").unwrap().finish();
+        let tile = tile.layer("same").unwrap().finish();
         assert!(!tile.finish().is_empty());
+    }
+
+    #[test]
+    fn layer_builder_rejects_empty_name() {
+        assert!(matches!(
+            MvtTileBuilder::new().layer(""),
+            Err(MvtError::MissingLayerName)
+        ));
+        assert!(matches!(
+            MvtTileBuilder::new().layer_with_capacity("", 1),
+            Err(MvtError::MissingLayerName)
+        ));
+    }
+
+    #[test]
+    fn layer_builder_accepts_feature_capacity() {
+        let layer = MvtTileBuilder::new()
+            .layer_with_capacity("layer", 2)
+            .unwrap();
+
+        assert_eq!(layer.layer.features.capacity(), 2);
     }
 
     #[test]

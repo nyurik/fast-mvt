@@ -8,7 +8,7 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 keywords = ["tile", "mvt", "map"]
 categories = ["science::geo"]
-exclude = [".github/*", ".gitignore", "fixtures/*", "justfile"]
+exclude = [".github/*", ".gitignore", "fixtures/*", "fuzz/*", "justfile"]
 rust-version = "1.87"
 
 [[bin]]
