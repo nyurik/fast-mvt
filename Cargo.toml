@@ -1,6 +1,6 @@
 [package]
 name = "fast-mvt"
-version = "0.1.2"
+version = "0.2.0"
 description = "Fast Mapbox Vector Tile (MVT) reader and writer"
 authors = ["Yuri Astrakhan <YuriAstrakhan@gmail.com>"]
 repository = "https://github.com/nyurik/fast-mvt"
