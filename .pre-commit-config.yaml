@@ -4,6 +4,7 @@ exclude: |
   (?x)^(
       \.gitmodules
     | src/vector_tile\.proto
+    | src/generated/.*
   )$
 
 repos:
