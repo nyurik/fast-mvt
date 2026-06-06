@@ -51,9 +51,7 @@ pub(crate) fn encode_tile(tile: MvtTile) -> MvtResult<Vec<u8>> {
         layer_bld.reserve_features(layer.features.len());
         for feature in layer.features {
             let mut feature_bld = layer_bld.feature(feature.geometry)?;
-            if let Some(id) = feature.id {
-                feature_bld.id(id);
-            }
+            feature_bld.id(feature.id);
             for (key, value) in feature.properties {
                 feature_bld.tag(key, value)?;
             }
@@ -145,8 +143,8 @@ pub struct MvtFeatureBuilder {
 }
 
 impl MvtFeatureBuilder {
-    pub fn id(&mut self, id: u64) -> &mut Self {
-        self.feature.id = Some(id);
+    pub fn id(&mut self, id: Option<u64>) -> &mut Self {
+        self.feature.id = id;
         self
     }
 
@@ -258,7 +256,7 @@ mod tests {
         let tile = MvtTileBuilder::new();
         let layer = tile.layer("layer");
         let mut feature = layer.feature(MvtGeometry::Point((1, 2).into())).unwrap();
-        feature.id(1);
+        feature.id(Some(1));
         feature.tag("skip", MvtValue::Null).unwrap();
         let layer = feature.finish();
         let bytes = layer.finish().finish();
@@ -269,7 +267,7 @@ mod tests {
         let tile = MvtTileBuilder::new();
         let layer = tile.layer("layer");
         let mut feature = layer.feature(MvtGeometry::Point((1, 2).into())).unwrap();
-        feature.id(1);
+        feature.id(Some(1));
         let layer = feature.finish();
         let tile = layer.finish();
         let mut out = vec![0xaa];
