@@ -86,7 +86,7 @@ multiple independently built layer buffers can be concatenated to form a tile.
 |-------------|-------------------------------------------------------------------------|
 | `reader`    | MVT tile decoding from bytes.                                           |
 | `writer`    | MVT tile encoding into bytes.                                           |
-| `json`      | Enable serde JSON support for the generated protobuf bindings.          |
+| `json`      | Enable serde JSON support.                                              |
 | `codegen`   | Regenerate checked-in protobuf bindings from `src/vector_tile.proto`.   |
 | `arbitrary` | Derive `arbitrary::Arbitrary` for generated protobuf types for fuzzing. |
 | `views`     | Internal feature, do not use. Must be here due to buffa limitations.    |
@@ -105,11 +105,8 @@ The generated protobuf files are checked in, so normal builds do not require
 
 The code was inspired by several open source MVT implementations:
 
-- `mvt` by the Minnesota Department of Transportation provided the encode-side
-  tile/layer/feature structure and MVT geometry command conformance tests.
-- `mvt-reader` by Paul Lange provided the checked-in codegen pattern,
-  layer metadata behavior, tag parsing validation, and decode-side geometry
-  structure.
+- Encoding and testing from `mvt` crate by the Minnesota Department of Transportation.
+- Decoding and testing from `mvt-reader` by Paul Lange.
 
 ## License
 

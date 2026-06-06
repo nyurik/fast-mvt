@@ -34,7 +34,7 @@ required-features = ["reader", "writer"]
 default = ["reader", "writer", "json"]
 reader = ["views"]
 writer = ["dep:dup-indexer"]
-json = ["dep:serde", "buffa/json"]
+json = ["dep:serde", "dep:serde_json", "buffa/json"]
 views = []
 codegen = ["dep:buffa-build"]
 arbitrary = ["dep:arbitrary", "buffa/arbitrary"]
@@ -47,6 +47,7 @@ clap = { version = "4", features = ["derive"], optional = true }
 dup-indexer = { version = "0.4.4", optional = true }
 geo-types = "0.7.19"
 serde = { version = "1.0.228", features = ["derive"], optional = true }
+serde_json = { version = "1.0.150", optional = true }
 thiserror = "2.0.11"
 usize_cast = "1.1.0"
 
@@ -59,7 +60,6 @@ criterion = { version = "0.8", features = ["html_reports"] }
 mvt = "0.13.0"
 mvt-reader = "2.3.0"
 prost = "0.14.3"
-serde_json = "1.0.150"
 test_each_file = "0.3.5"
 tinymvt = "0.3.0"
 

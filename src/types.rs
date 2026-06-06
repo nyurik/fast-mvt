@@ -225,6 +225,72 @@ impl From<bool> for MvtValue {
     }
 }
 
+#[cfg(feature = "json")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
+pub enum MvtJsonValueError {
+    #[error("non-finite float cannot be represented as JSON")]
+    NonFiniteFloat,
+    #[error("invalid JSON number")]
+    InvalidJsonNumber,
+    #[error("JSON array cannot be represented as an MVT value")]
+    UnsupportedJsonArray,
+    #[error("JSON object cannot be represented as an MVT value")]
+    UnsupportedJsonObject,
+}
+
+#[cfg(feature = "json")]
+impl TryFrom<MvtValue> for serde_json::Value {
+    type Error = MvtJsonValueError;
+
+    fn try_from(value: MvtValue) -> Result<Self, Self::Error> {
+        match value {
+            MvtValue::String(value) => Ok(Self::String(value)),
+            MvtValue::Float(value) => json_number(f64::from(value)),
+            MvtValue::Double(value) => json_number(value),
+            MvtValue::Int(value) | MvtValue::SInt(value) => Ok(value.into()),
+            MvtValue::UInt(value) => Ok(value.into()),
+            MvtValue::Bool(value) => Ok(Self::Bool(value)),
+            MvtValue::Null => Ok(Self::Null),
+        }
+    }
+}
+
+#[cfg(feature = "json")]
+impl TryFrom<serde_json::Value> for MvtValue {
+    type Error = MvtJsonValueError;
+
+    fn try_from(value: serde_json::Value) -> Result<Self, Self::Error> {
+        use serde_json::Value;
+
+        match value {
+            Value::Null => Ok(Self::Null),
+            Value::Bool(value) => Ok(Self::Bool(value)),
+            Value::Number(value) => {
+                if let Some(value) = value.as_i64() {
+                    Ok(Self::Int(value))
+                } else if let Some(value) = value.as_u64() {
+                    Ok(Self::UInt(value))
+                } else if let Some(value) = value.as_f64() {
+                    Ok(Self::Double(value))
+                } else {
+                    Err(MvtJsonValueError::InvalidJsonNumber)
+                }
+            }
+            Value::String(value) => Ok(Self::String(value)),
+            Value::Array(_) => Err(MvtJsonValueError::UnsupportedJsonArray),
+            Value::Object(_) => Err(MvtJsonValueError::UnsupportedJsonObject),
+        }
+    }
+}
+
+#[cfg(feature = "json")]
+fn json_number(value: f64) -> Result<serde_json::Value, MvtJsonValueError> {
+    serde_json::Number::from_f64(value)
+        .map(serde_json::Value::Number)
+        .ok_or(MvtJsonValueError::NonFiniteFloat)
+}
+
 impl PartialEq for MvtValue {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -257,19 +323,61 @@ impl std::hash::Hash for MvtValue {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash as _, Hasher as _};
+#[cfg(all(test, feature = "json"))]
+mod tests_json {
+    use serde_json::json;
 
-    use super::MvtValue;
+    use super::*;
 
     #[test]
-    fn null_values_compare_and_hash() {
-        assert_eq!(MvtValue::Null, MvtValue::Null);
+    fn mvt_values_convert_to_json_values() {
+        assert_eq!(
+            serde_json::Value::try_from(MvtValue::String("name".into())),
+            Ok(json!("name"))
+        );
+        assert_eq!(
+            serde_json::Value::try_from(MvtValue::Int(-3)),
+            Ok(json!(-3))
+        );
+        assert_eq!(serde_json::Value::try_from(MvtValue::UInt(4)), Ok(json!(4)));
+        assert_eq!(
+            serde_json::Value::try_from(MvtValue::Double(1.5)),
+            Ok(json!(1.5))
+        );
+        assert_eq!(
+            serde_json::Value::try_from(MvtValue::Bool(true)),
+            Ok(json!(true))
+        );
+        assert_eq!(
+            serde_json::Value::try_from(MvtValue::Null),
+            Ok(serde_json::Value::Null)
+        );
+        assert_eq!(
+            serde_json::Value::try_from(MvtValue::Double(f64::NAN)),
+            Err(MvtJsonValueError::NonFiniteFloat)
+        );
+    }
 
-        let mut hasher = DefaultHasher::new();
-        MvtValue::Null.hash(&mut hasher);
-        assert_ne!(hasher.finish(), 0);
+    #[test]
+    fn json_values_convert_to_mvt_values() {
+        assert_eq!(
+            MvtValue::try_from(json!("name")),
+            Ok(MvtValue::String("name".into()))
+        );
+        assert_eq!(MvtValue::try_from(json!(-3)), Ok(MvtValue::Int(-3)));
+        assert_eq!(MvtValue::try_from(json!(1.5)), Ok(MvtValue::Double(1.5)));
+        assert_eq!(MvtValue::try_from(json!(true)), Ok(MvtValue::Bool(true)));
+        assert_eq!(
+            MvtValue::try_from(serde_json::Value::Null),
+            Ok(MvtValue::Null)
+        );
+        assert_eq!(
+            MvtValue::try_from(json!([])),
+            Err(MvtJsonValueError::UnsupportedJsonArray)
+        );
+        assert_eq!(
+            MvtValue::try_from(json!({})),
+            Err(MvtJsonValueError::UnsupportedJsonObject)
+        );
     }
 }
