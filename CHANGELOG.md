@@ -9,9 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.2](https://github.com/nyurik/fast-mvt/compare/v0.1.1...v0.1.2) - 2026-06-06
 
-### Other
+### New
 
-- json - mvt Value conversion, minor cleanup ([#4](https://github.com/nyurik/fast-mvt/pull/4))
+- json - mvt value conversion ([#4](https://github.com/nyurik/fast-mvt/pull/4))
 
 ## [0.1.1](https://github.com/nyurik/fast-mvt/compare/v0.1.0...v0.1.1) - 2026-06-06
 
