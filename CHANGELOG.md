@@ -7,11 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.3](https://github.com/nyurik/fast-mvt/compare/v0.1.2...v0.1.3) - 2026-06-06
+## [0.2.0](https://github.com/nyurik/fast-mvt/compare/v0.1.2...v0.2.0) - 2026-06-06
 
-### Other
+### Breaking Changes
 
-- chore! MvtFeatureBuilder::id now takes option ([#6](https://github.com/nyurik/fast-mvt/pull/6))
+- MvtFeatureBuilder::id now takes option ([#6](https://github.com/nyurik/fast-mvt/pull/6))
 
 ## [0.1.2](https://github.com/nyurik/fast-mvt/compare/v0.1.1...v0.1.2) - 2026-06-06
 
