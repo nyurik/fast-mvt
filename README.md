@@ -13,21 +13,7 @@ Geometry uses `geo-types` with `i32` coordinates. The crate does not project,
 scale, round, or handle floating point geometry coordinates; callers provide and
 receive tile-space integers.
 
-## Features
-
-| Feature     | Purpose                                                                 |
-|-------------|-------------------------------------------------------------------------|
-| `reader`    | MVT tile decoding from bytes.                                           |
-| `writer`    | MVT tile encoding into bytes.                                           |
-| `json`      | Enable serde JSON support for the generated protobuf bindings.          |
-| `codegen`   | Regenerate checked-in protobuf bindings from `src/vector_tile.proto`.   |
-| `arbitrary` | Derive `arbitrary::Arbitrary` for generated protobuf types for fuzzing. |
-| `views`     | Internal feature, do not use. Must be here due to buffa limitations.    |
-
-The generated protobuf files are checked in, so normal builds do not require
-`protoc`. Run `just update-generated` to refresh generated code after `buffa` upgrades.
-
-## Decode traversal
+## Decoding a tile
 
 ```rust
 use fast_mvt::{MvtReaderRef, MvtResult};
@@ -53,7 +39,7 @@ fn read_tile(bytes: &[u8]) -> MvtResult<()> {
 }
 ```
 
-## Encode builder
+## Encoding a tile
 
 ```rust
 use fast_mvt::{MvtGeometry, MvtResult, MvtTileBuilder};
@@ -81,19 +67,32 @@ multiple independently built layer buffers can be concatenated to form a tile.
 
 ## Benchmarks
 
-Decoder benchmark decodes all supported fixture tiles and iterate over all
-elements. Run the benchmarks with `just bench-decode`.
-
+#### Decoding
 | Decoder      |    Time |     Compare |
 |--------------|--------:|------------:|
 | `fast-mvt`   |  453 ms |           - |
 | `tinymvt`    |  638 ms |  41% slower |
 | `mvt-reader` | 1165 ms | 157% slower |
 
+#### Encoding
 | Encoder    |     Time |      Compare |
 |------------|---------:|-------------:|
 | `fast-mvt` |   987 ms |            - |
 | `mvt`      | 11549 ms | 1070% slower |
+
+## Features
+
+| Feature     | Purpose                                                                 |
+|-------------|-------------------------------------------------------------------------|
+| `reader`    | MVT tile decoding from bytes.                                           |
+| `writer`    | MVT tile encoding into bytes.                                           |
+| `json`      | Enable serde JSON support for the generated protobuf bindings.          |
+| `codegen`   | Regenerate checked-in protobuf bindings from `src/vector_tile.proto`.   |
+| `arbitrary` | Derive `arbitrary::Arbitrary` for generated protobuf types for fuzzing. |
+| `views`     | Internal feature, do not use. Must be here due to buffa limitations.    |
+
+The generated protobuf files are checked in, so normal builds do not require
+`protoc`. Run `just update-generated` to refresh generated code after `buffa` upgrades.
 
 ## Development
 
