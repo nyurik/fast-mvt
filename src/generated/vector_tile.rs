@@ -743,7 +743,7 @@ pub mod tile {
             f.debug_struct("Feature")
                 .field("id", &self.id)
                 .field("tags", &self.tags)
-                .field("r#type", &self.r#type)
+                .field("type", &self.r#type)
                 .field("geometry", &self.geometry)
                 .finish()
         }

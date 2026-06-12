@@ -42,7 +42,7 @@ cli = ["reader", "dep:clap"]
 
 [dependencies]
 arbitrary = { version = "1.4", features = ["derive"], optional = true }
-buffa = "0.7.0"
+buffa = "0.7.1"
 clap = { version = "4", features = ["derive"], optional = true }
 dup-indexer = { version = "0.4.4", optional = true }
 geo-types = "0.7.19"
