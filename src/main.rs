@@ -164,3 +164,125 @@ fn format_coords(coords: &[Coord<i32>]) -> String {
         .collect::<Vec<_>>()
         .join(",")
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use fast_mvt::{MvtTileBuilder, MvtValueRef};
+    use geo_types::{Geometry, GeometryCollection};
+
+    use super::*;
+
+    #[test]
+    fn dump_reader_writes_layer_feature_geometry_and_properties() {
+        let layer = MvtTileBuilder::new()
+            .layer("places")
+            .unwrap()
+            .feature(MvtGeometry::Point((1, 2).into()))
+            .unwrap();
+        let mut feature = layer;
+        feature.tag("name", "Example").unwrap();
+        feature.tag("visible", true).unwrap();
+        let bytes = feature.finish().finish().finish();
+        let reader = MvtReaderRef::new(&bytes).unwrap();
+        let mut out = Vec::new();
+
+        dump_reader(&reader, &mut out).unwrap();
+        let out = String::from_utf8(out).unwrap();
+
+        assert!(out.contains("  name: places"));
+        assert!(out.contains("  feature: 0"));
+        assert!(out.contains("    id: (none)"));
+        assert!(out.contains("    geomtype: point"));
+        assert!(out.contains("      POINT(1,2)"));
+        assert!(out.contains("      name=\"Example\""));
+        assert!(out.contains("      visible=true"));
+    }
+
+    #[test]
+    fn run_dump_reads_tile_file() {
+        let bytes = MvtTileBuilder::new().finish();
+        let path = std::env::temp_dir().join(format!(
+            "fast-mvt-empty-{}-{}.mvt",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("test")
+        ));
+        fs::write(&path, bytes).unwrap();
+
+        run(Cli {
+            command: Command::Dump { file: path.clone() },
+        })
+        .unwrap();
+
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn formatting_helpers_cover_value_and_geometry_variants() {
+        assert_eq!(format_geom_type(Some(GeomType::Point)), "point");
+        assert_eq!(format_geom_type(Some(GeomType::Linestring)), "linestring");
+        assert_eq!(format_geom_type(Some(GeomType::Polygon)), "polygon");
+        assert_eq!(format_geom_type(Some(GeomType::Unknown)), "unknown");
+        assert_eq!(format_geom_type(None), "unknown");
+
+        assert_eq!(format_value(MvtValueRef::String("x")), "\"x\"");
+        assert_eq!(format_value(MvtValueRef::Float(1.25)), "1.25");
+        assert_eq!(format_value(MvtValueRef::Double(2.5)), "2.5");
+        assert_eq!(format_value(MvtValueRef::Int(-3)), "-3");
+        assert_eq!(format_value(MvtValueRef::UInt(4)), "4");
+        assert_eq!(format_value(MvtValueRef::SInt(-5)), "-5");
+        assert_eq!(format_value(MvtValueRef::Bool(true)), "true");
+        assert_eq!(format_value(MvtValueRef::Null), "null");
+
+        let mut out = Vec::new();
+        write_geometry(
+            &mut out,
+            &MvtGeometry::MultiPoint(MultiPoint(vec![Point::new(1, 2), Point::new(3, 4)])),
+        )
+        .unwrap();
+        write_geometry(
+            &mut out,
+            &MvtGeometry::LineString(LineString(vec![(1, 2).into(), (3, 4).into()])),
+        )
+        .unwrap();
+        write_geometry(
+            &mut out,
+            &MvtGeometry::MultiLineString(MultiLineString(vec![LineString(vec![
+                (1, 2).into(),
+                (3, 4).into(),
+            ])])),
+        )
+        .unwrap();
+        write_geometry(
+            &mut out,
+            &MvtGeometry::Polygon(Polygon::new(
+                LineString(vec![(0, 0).into(), (1, 0).into(), (0, 1).into()]),
+                vec![LineString(vec![(0, 0).into(), (0, 0).into()])],
+            )),
+        )
+        .unwrap();
+        write_geometry(
+            &mut out,
+            &MvtGeometry::MultiPolygon(
+                vec![Polygon::new(
+                    LineString(vec![(0, 0).into(), (1, 0).into(), (0, 1).into()]),
+                    vec![],
+                )]
+                .into(),
+            ),
+        )
+        .unwrap();
+        write_geometry(
+            &mut out,
+            &Geometry::GeometryCollection(GeometryCollection(vec![])),
+        )
+        .unwrap();
+
+        let out = String::from_utf8(out).unwrap();
+        assert!(out.contains("POINT(1,2)"));
+        assert!(out.contains("LINESTRING[count=2](1 2,3 4)"));
+        assert!(out.contains("[OUTER]"));
+        assert!(out.contains("[INNER]"));
+    }
+}
