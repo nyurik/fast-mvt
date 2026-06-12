@@ -167,13 +167,16 @@ fn format_coords(coords: &[Coord<i32>]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use fast_mvt::{MvtTileBuilder, MvtValueRef};
+    #[cfg(feature = "writer")]
+    use fast_mvt::MvtTileBuilder;
+    use fast_mvt::MvtValueRef;
     use geo_types::{Geometry, GeometryCollection};
     use tempfile::NamedTempFile;
 
     use super::*;
 
     #[test]
+    #[cfg(feature = "writer")]
     fn dump_reader_writes_layer_feature_geometry_and_properties() {
         let layer = MvtTileBuilder::new()
             .layer("places")
@@ -201,7 +204,7 @@ mod tests {
 
     #[test]
     fn run_dump_reads_tile_file() {
-        let bytes = MvtTileBuilder::new().finish();
+        let bytes = Vec::new();
         let mut file = NamedTempFile::new().unwrap();
         io::Write::write_all(&mut file, &bytes).unwrap();
 

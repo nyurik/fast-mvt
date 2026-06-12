@@ -326,8 +326,7 @@ impl std::hash::Hash for MvtValue {
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher as _};
+    use std::hash::{Hash, Hasher};
 
     use super::*;
 
@@ -390,21 +389,37 @@ mod tests {
 
     #[test]
     fn mvt_value_equality_and_hash_include_variant_and_float_bits() {
-        fn hash(value: &MvtValue) -> u64 {
-            let mut hasher = DefaultHasher::new();
+        #[derive(Default)]
+        struct RecordingHasher(Vec<u8>);
+
+        impl Hasher for RecordingHasher {
+            fn finish(&self) -> u64 {
+                0
+            }
+
+            fn write(&mut self, bytes: &[u8]) {
+                self.0.extend_from_slice(bytes);
+            }
+        }
+
+        fn hash_bytes(value: &MvtValue) -> Vec<u8> {
+            let mut hasher = RecordingHasher::default();
             value.hash(&mut hasher);
-            hasher.finish()
+            hasher.0
         }
 
         assert_eq!(MvtValue::Float(f32::NAN), MvtValue::Float(f32::NAN));
         assert_ne!(MvtValue::Int(1), MvtValue::SInt(1));
         assert_ne!(MvtValue::Int(1), MvtValue::UInt(1));
         assert_eq!(
-            hash(&MvtValue::Double(f64::NAN)),
-            hash(&MvtValue::Double(f64::NAN))
+            hash_bytes(&MvtValue::Double(f64::NAN)),
+            hash_bytes(&MvtValue::Double(f64::NAN))
         );
-        assert_ne!(hash(&MvtValue::Int(1)), hash(&MvtValue::SInt(1)));
-        assert_eq!(hash(&MvtValue::Null), hash(&MvtValue::Null));
+        assert_ne!(
+            hash_bytes(&MvtValue::Int(1)),
+            hash_bytes(&MvtValue::SInt(1))
+        );
+        assert_eq!(hash_bytes(&MvtValue::Null), hash_bytes(&MvtValue::Null));
     }
 }
 
