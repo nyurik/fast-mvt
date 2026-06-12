@@ -323,6 +323,106 @@ impl std::hash::Hash for MvtValue {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use std::borrow::Cow;
+    use std::hash::{Hash, Hasher};
+
+    use super::*;
+
+    #[test]
+    fn owned_tile_layer_and_feature_helpers_mutate_expected_fields() {
+        let mut feature = MvtFeature::new(MvtGeometry::Point((1, 2).into()));
+        assert_eq!(feature.id, None);
+        assert_eq!(feature.num_tags(), 0);
+
+        feature.set_id(7);
+        feature.add_tag("raw", MvtValue::Null);
+        feature.add_tag_string("string", "value");
+        feature.add_tag_float("float", 1.25);
+        feature.add_tag_double("double", 2.5);
+        feature.add_tag_int("int", -3);
+        feature.add_tag_uint("uint", 4);
+        feature.add_tag_sint("sint", -5);
+        feature.add_tag_bool("bool", true);
+        assert_eq!(feature.id, Some(7));
+        assert_eq!(feature.num_tags(), 8);
+
+        let mut layer = MvtLayer::new("places", DEFAULT_EXTENT);
+        assert_eq!(layer.name(), "places");
+        assert_eq!(layer.num_features(), 0);
+        layer.add_feature(feature);
+        assert_eq!(layer.num_features(), 1);
+
+        let mut tile = MvtTile::new();
+        assert!(tile.layers.is_empty());
+        tile.add_layer(layer);
+        assert_eq!(tile.layers.len(), 1);
+    }
+
+    #[test]
+    fn mvt_value_from_impls_preserve_variant_intent() {
+        assert_eq!(
+            MvtValue::from(String::from("owned")),
+            MvtValue::String("owned".into())
+        );
+        assert_eq!(
+            MvtValue::from("borrowed"),
+            MvtValue::String("borrowed".into())
+        );
+        assert_eq!(
+            MvtValue::from(Cow::Borrowed("cow")),
+            MvtValue::String("cow".into())
+        );
+        assert_eq!(MvtValue::from(1.25_f32), MvtValue::Float(1.25));
+        assert_eq!(MvtValue::from(2.5_f64), MvtValue::Double(2.5));
+        assert_eq!(MvtValue::from(-3_i64), MvtValue::Int(-3));
+        assert_eq!(MvtValue::from(-4_i32), MvtValue::Int(-4));
+        assert_eq!(MvtValue::from(-5_i16), MvtValue::Int(-5));
+        assert_eq!(MvtValue::from(-6_i8), MvtValue::Int(-6));
+        assert_eq!(MvtValue::from(7_u64), MvtValue::UInt(7));
+        assert_eq!(MvtValue::from(8_u32), MvtValue::UInt(8));
+        assert_eq!(MvtValue::from(9_u16), MvtValue::UInt(9));
+        assert_eq!(MvtValue::from(10_u8), MvtValue::UInt(10));
+        assert_eq!(MvtValue::from(true), MvtValue::Bool(true));
+    }
+
+    #[test]
+    fn mvt_value_equality_and_hash_include_variant_and_float_bits() {
+        #[derive(Default)]
+        struct RecordingHasher(Vec<u8>);
+
+        impl Hasher for RecordingHasher {
+            fn finish(&self) -> u64 {
+                0
+            }
+
+            fn write(&mut self, bytes: &[u8]) {
+                self.0.extend_from_slice(bytes);
+            }
+        }
+
+        fn hash_bytes(value: &MvtValue) -> Vec<u8> {
+            let mut hasher = RecordingHasher::default();
+            value.hash(&mut hasher);
+            hasher.0
+        }
+
+        assert_eq!(MvtValue::Float(f32::NAN), MvtValue::Float(f32::NAN));
+        assert_ne!(MvtValue::Int(1), MvtValue::SInt(1));
+        assert_ne!(MvtValue::Int(1), MvtValue::UInt(1));
+        assert_eq!(
+            hash_bytes(&MvtValue::Double(f64::NAN)),
+            hash_bytes(&MvtValue::Double(f64::NAN))
+        );
+        assert_ne!(
+            hash_bytes(&MvtValue::Int(1)),
+            hash_bytes(&MvtValue::SInt(1))
+        );
+        assert_eq!(hash_bytes(&MvtValue::Null), hash_bytes(&MvtValue::Null));
+    }
+}
+
 #[cfg(all(test, feature = "json"))]
 mod tests_json {
     use serde_json::json;
@@ -345,6 +445,10 @@ mod tests_json {
             Ok(json!(1.5))
         );
         assert_eq!(
+            serde_json::Value::try_from(MvtValue::Float(2.5)),
+            Ok(json!(2.5))
+        );
+        assert_eq!(
             serde_json::Value::try_from(MvtValue::Bool(true)),
             Ok(json!(true))
         );
@@ -365,6 +469,10 @@ mod tests_json {
             Ok(MvtValue::String("name".into()))
         );
         assert_eq!(MvtValue::try_from(json!(-3)), Ok(MvtValue::Int(-3)));
+        assert_eq!(
+            MvtValue::try_from(json!(u64::MAX)),
+            Ok(MvtValue::UInt(u64::MAX))
+        );
         assert_eq!(MvtValue::try_from(json!(1.5)), Ok(MvtValue::Double(1.5)));
         assert_eq!(MvtValue::try_from(json!(true)), Ok(MvtValue::Bool(true)));
         assert_eq!(

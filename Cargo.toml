@@ -60,6 +60,7 @@ criterion = { version = "0.8", features = ["html_reports"] }
 mvt = "0.13.0"
 mvt-reader = "2.3.0"
 prost = "0.14.3"
+tempfile = "3.27.0"
 test_each_file = "0.3.5"
 tinymvt = "0.3.0"
 
