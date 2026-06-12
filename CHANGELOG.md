@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1](https://github.com/nyurik/fast-mvt/compare/v0.3.0...v0.3.1) - 2026-06-12
+
+### Other
+
+- add more tests ([#12](https://github.com/nyurik/fast-mvt/pull/12))
+- use new buffa with 20% faster decoding ([#10](https://github.com/nyurik/fast-mvt/pull/10))
+
 ## [0.3.0](https://github.com/nyurik/fast-mvt/compare/v0.2.0...v0.3.0) - 2026-06-06
 
 ### Other
