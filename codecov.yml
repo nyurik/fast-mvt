@@ -1,6 +1,9 @@
 codecov:
   require_ci_to_pass: false
 
+ignore:
+  - "src/generated/**"
+
 coverage:
   status:
     patch: off
