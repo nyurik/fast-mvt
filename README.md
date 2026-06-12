@@ -68,13 +68,19 @@ multiple independently built layer buffers can be concatenated to form a tile.
 ## Benchmarks
 
 #### Decoding
+
+Run with `just bench-decode`:
+
 | Decoder      |    Time |     Compare |
 |--------------|--------:|------------:|
-| `fast-mvt`   |  453 ms |           - |
-| `tinymvt`    |  638 ms |  41% slower |
-| `mvt-reader` | 1165 ms | 157% slower |
+| `fast-mvt`   |  228 ms |           - |
+| `tinymvt`    |  410 ms |  80% slower |
+| `mvt-reader` | 1148 ms | 403% slower |
 
 #### Encoding
+
+Run with `just bench-encode`:
+
 | Encoder    |     Time |      Compare |
 |------------|---------:|-------------:|
 | `fast-mvt` |   987 ms |            - |

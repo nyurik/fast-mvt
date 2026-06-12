@@ -893,6 +893,7 @@ pub mod tile {
                             == ::buffa::encoding::WireType::LengthDelimited
                         {
                             let payload = ::buffa::types::borrow_bytes(&mut cur)?;
+                            view.tags.reserve(payload.len());
                             let mut pcur: &[u8] = payload;
                             while !pcur.is_empty() {
                                 view.tags.push(::buffa::types::decode_uint32(&mut pcur)?);
@@ -913,6 +914,7 @@ pub mod tile {
                             == ::buffa::encoding::WireType::LengthDelimited
                         {
                             let payload = ::buffa::types::borrow_bytes(&mut cur)?;
+                            view.geometry.reserve(payload.len());
                             let mut pcur: &[u8] = payload;
                             while !pcur.is_empty() {
                                 view.geometry
