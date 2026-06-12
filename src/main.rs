@@ -167,10 +167,9 @@ fn format_coords(coords: &[Coord<i32>]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-
     use fast_mvt::{MvtTileBuilder, MvtValueRef};
     use geo_types::{Geometry, GeometryCollection};
+    use tempfile::NamedTempFile;
 
     use super::*;
 
@@ -203,19 +202,15 @@ mod tests {
     #[test]
     fn run_dump_reads_tile_file() {
         let bytes = MvtTileBuilder::new().finish();
-        let path = std::env::temp_dir().join(format!(
-            "fast-mvt-empty-{}-{}.mvt",
-            std::process::id(),
-            std::thread::current().name().unwrap_or("test")
-        ));
-        fs::write(&path, bytes).unwrap();
+        let mut file = NamedTempFile::new().unwrap();
+        io::Write::write_all(&mut file, &bytes).unwrap();
 
         run(Cli {
-            command: Command::Dump { file: path.clone() },
+            command: Command::Dump {
+                file: file.path().to_path_buf(),
+            },
         })
         .unwrap();
-
-        fs::remove_file(path).unwrap();
     }
 
     #[test]
