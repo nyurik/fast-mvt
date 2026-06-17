@@ -58,13 +58,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@v2
         with: { tool: 'just,cargo-llvm-cov,protoc' }
-      - name: Generate code coverage
-        run: just ci-coverage
+      - run: just ci-coverage
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: target/llvm-cov/codecov.info
+          files: target/llvm-cov/lcov.info
 
   # This job checks if any of the previous jobs failed or were canceled.
   # This approach also allows some jobs to be skipped if they are not needed.
