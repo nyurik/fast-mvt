@@ -82,11 +82,11 @@ bench-quick: bench-decode-quick bench-encode-quick
 
 # Compile and smoke-test the decode benchmark quickly, suitable for CI
 bench-decode-quick:
-    FAST_MVT_BENCH_LIMIT=8 cargo bench --bench decoder -- --test
+    cargo bench --bench decoder -- --test
 
 # Compile and smoke-test the encode benchmark quickly, suitable for CI
 bench-encode-quick:
-    FAST_MVT_BENCH_LIMIT=8 cargo bench --bench encoder -- --test
+    cargo bench --bench encoder -- --test
 
 # Regenerate protobuf bindings and fail if checked-in output changes
 codegen-check: update-generated assert-git-is-clean
