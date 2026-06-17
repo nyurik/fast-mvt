@@ -61,10 +61,29 @@ pub(crate) fn encode_tile(tile: MvtTile) -> MvtResult<Vec<u8>> {
         let mut layer_bld = tile_bld.layer_with_capacity(layer.name, layer.features.len())?;
         layer_bld.extent(layer.extent);
         for feature in layer.features {
-            let mut feature_bld = layer_bld.feature(feature.geometry)?;
+            let mut feature_bld = layer_bld.feature(&feature.geometry)?;
             feature_bld.id(feature.id);
             for (key, value) in feature.properties {
                 feature_bld.tag(key, value)?;
+            }
+            layer_bld = feature_bld.finish();
+        }
+        tile_bld = layer_bld.finish();
+    }
+    Ok(tile_bld.finish())
+}
+
+pub(crate) fn encode_tile_ref(tile: &MvtTile) -> MvtResult<Vec<u8>> {
+    let mut tile_bld = MvtTileBuilder::with_capacity(tile.layers.len());
+    for layer in &tile.layers {
+        let mut layer_bld =
+            tile_bld.layer_with_capacity(layer.name.clone(), layer.features.len())?;
+        layer_bld.extent(layer.extent);
+        for feature in &layer.features {
+            let mut feature_bld = layer_bld.feature(&feature.geometry)?;
+            feature_bld.id(feature.id);
+            for (key, value) in &feature.properties {
+                feature_bld.tag(key, value.clone())?;
             }
             layer_bld = feature_bld.finish();
         }
@@ -113,9 +132,8 @@ impl MvtLayerBuilder {
         self.layer.features.len()
     }
 
-    #[allow(clippy::needless_pass_by_value)]
-    pub fn feature(self, geometry: MvtGeometry) -> MvtResult<MvtFeatureBuilder> {
-        let (geom_type, geometry) = encode_geometry(&geometry)?;
+    pub fn feature(self, geometry: &MvtGeometry) -> MvtResult<MvtFeatureBuilder> {
+        let (geom_type, geometry) = encode_geometry(geometry)?;
         Ok(MvtFeatureBuilder {
             layer: self,
             feature: Feature {
@@ -242,7 +260,7 @@ mod tests {
     #[test]
     fn layer_builder_deduplicates_keys_and_values() {
         let layer = MvtTileBuilder::new().layer("layer").unwrap();
-        let mut feature = layer.feature(MvtGeometry::Point((1, 2).into())).unwrap();
+        let mut feature = layer.feature(&MvtGeometry::Point((1, 2).into())).unwrap();
         feature.tag("foo", MvtValue::String("bar".into())).unwrap();
         feature.tag("foo", MvtValue::String("baz".into())).unwrap();
         feature.tag("bar", MvtValue::String("bar".into())).unwrap();
@@ -261,7 +279,7 @@ mod tests {
     fn encode_appends_and_validates_tile_metadata() {
         let tile = MvtTileBuilder::new();
         let layer = tile.layer("layer").unwrap();
-        let mut feature = layer.feature(MvtGeometry::Point((1, 2).into())).unwrap();
+        let mut feature = layer.feature(&MvtGeometry::Point((1, 2).into())).unwrap();
         feature.id(Some(1));
         feature.tag("skip", MvtValue::Null).unwrap();
         let layer = feature.finish();
@@ -272,7 +290,7 @@ mod tests {
 
         let tile = MvtTileBuilder::new();
         let layer = tile.layer("layer").unwrap();
-        let mut feature = layer.feature(MvtGeometry::Point((1, 2).into())).unwrap();
+        let mut feature = layer.feature(&MvtGeometry::Point((1, 2).into())).unwrap();
         feature.id(Some(1));
         let layer = feature.finish();
         let tile = layer.finish();
@@ -284,6 +302,25 @@ mod tests {
         let tile = tile.layer("same").unwrap().finish();
         let tile = tile.layer("same").unwrap().finish();
         assert!(!tile.finish().is_empty());
+    }
+
+    #[test]
+    fn encode_ref_matches_owned_encode() {
+        let mut feature = crate::MvtFeature::new(MvtGeometry::Point((1, 2).into()));
+        feature.set_id(7);
+        feature.add_tag_string("name", "Example");
+        feature.add_tag_bool("visible", true);
+
+        let mut layer = crate::MvtLayer::new("places", DEFAULT_EXTENT);
+        layer.add_feature(feature);
+
+        let mut tile = MvtTile::new();
+        tile.add_layer(layer);
+
+        assert_eq!(
+            encode_tile(tile.clone()).unwrap(),
+            encode_tile_ref(&tile).unwrap()
+        );
     }
 
     #[test]

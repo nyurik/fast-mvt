@@ -181,7 +181,7 @@ mod tests {
         let layer = MvtTileBuilder::new()
             .layer("places")
             .unwrap()
-            .feature(MvtGeometry::Point((1, 2).into()))
+            .feature(&MvtGeometry::Point((1, 2).into()))
             .unwrap();
         let mut feature = layer;
         feature.tag("name", "Example").unwrap();

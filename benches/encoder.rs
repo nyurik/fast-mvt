@@ -24,11 +24,20 @@ fn bench_encode(c: &mut Criterion) {
     let mut group = c.benchmark_group("mvt encode");
     group.sample_size(10);
     group.measurement_time(Duration::from_secs(10));
-    bench_owned(&mut group, "fast-mvt encode", &tiles, |tile| {
+    bench_owned(&mut group, "fast-mvt owned encode", &tiles, |tile| {
         tile.clone().encode().expect("fast-mvt encode")
+    });
+    bench_owned(&mut group, "fast-mvt encode", &tiles, |tile| {
+        tile.encode_ref().expect("fast-mvt encode")
+    });
+    bench_owned(&mut group, "mvt owned encode", &tiles, |tile| {
+        encode_with_mvt(&black_box(tile.clone())).expect("mvt encode")
     });
     bench_owned(&mut group, "mvt encode", &tiles, |tile| {
         encode_with_mvt(tile).expect("mvt encode")
+    });
+    bench_owned(&mut group, "tinymvt owned encode", &tiles, |tile| {
+        encode_with_tinymvt(&black_box(tile.clone())).expect("tinymvt encode")
     });
     bench_owned(&mut group, "tinymvt encode", &tiles, |tile| {
         encode_with_tinymvt(tile).expect("tinymvt encode")

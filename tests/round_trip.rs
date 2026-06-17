@@ -38,7 +38,7 @@ fn empty_tile_round_trips() {
 fn owned_builder_api_encodes_like_mvt_crate_surface() {
     let tile = MvtTileBuilder::new();
     let layer = tile.layer("layer").unwrap();
-    let mut feature = layer.feature(Geometry::Point((1, 2).into())).unwrap();
+    let mut feature = layer.feature(&Geometry::Point((1, 2).into())).unwrap();
     feature.id(Some(7));
     feature.tag_string("name", "place").unwrap();
     feature.tag_double("score", 1.5).unwrap();
@@ -59,7 +59,7 @@ fn owned_builder_api_encodes_like_mvt_crate_surface() {
     let bytes = MvtTileBuilder::new()
         .layer("layer")
         .unwrap()
-        .feature(Geometry::Point((1, 2).into()))
+        .feature(&Geometry::Point((1, 2).into()))
         .unwrap()
         .finish()
         .finish()
