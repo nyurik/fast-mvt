@@ -1,32 +1,69 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use fast_mvt::{MvtReaderRef, MvtTile};
+
 type MvtPath = (u64, PathBuf);
 
+#[allow(dead_code)]
+pub struct BenchTile {
+    pub bytes: usize,
+    pub data: Vec<u8>,
+    pub parsed: MvtTile,
+}
+
 #[must_use]
-pub fn load_repo_mvt_files() -> Vec<Vec<u8>> {
+pub fn load_repo_mvt_files(allow_large: bool) -> Vec<BenchTile> {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/mvt-fixtures/real-world");
     let mut paths = Vec::new();
     collect_mvt_paths(&dir, &mut paths);
 
-    let paths = sample_mvt_paths(paths);
+    let paths = sample_mvt_paths(paths, allow_large);
     assert!(
         !paths.is_empty(),
         "no .mvt fixtures found in {}",
         dir.display()
     );
-    paths
+    let tiles = paths
         .into_iter()
         .map(|path| {
-            fs::read(&path).unwrap_or_else(|err| panic!("can't read {}: {err}", path.display()))
+            let data = fs::read(&path)
+                .unwrap_or_else(|err| panic!("can't read {}: {err}", path.display()));
+            let bytes = data.len();
+            (bytes, data)
         })
-        .collect()
+        // All benchmarked decoders must be able to traverse the same tile set.
+        // Filter out fixtures that mvt-reader cannot inspect before Criterion
+        // starts measuring, so its benchmark does not panic mid-run.
+        .filter(|(_, data)| {
+            mvt_reader::Reader::new(data.clone())
+                .and_then(|reader| reader.get_layer_metadata().map(|_| ()))
+                .is_ok()
+        })
+        .map(|(bytes, data)| {
+            let parsed = MvtReaderRef::new(&data)
+                .and_then(|reader| reader.to_tile())
+                .expect("decode fixture");
+            BenchTile {
+                bytes,
+                data,
+                parsed,
+            }
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        !tiles.is_empty(),
+        "no mvt-reader-compatible .mvt fixtures found in {}",
+        dir.display()
+    );
+    tiles
 }
 
-fn sample_mvt_paths(mut entries: Vec<MvtPath>) -> Vec<PathBuf> {
-    const SMALLEST_COUNT: usize = 20;
-    const MIDDLE_COUNT: usize = 5;
-    const LARGEST_COUNT: usize = 1;
+fn sample_mvt_paths(mut entries: Vec<MvtPath>, allow_large: bool) -> Vec<PathBuf> {
+    const SMALLEST_COUNT: usize = 10;
+    const MIDDLE_COUNT: usize = 20;
+    const LARGEST_COUNT: usize = 3;
+    let large_count = if allow_large { LARGEST_COUNT } else { 0 };
 
     entries.sort_by(|(left_bytes, left_path), (right_bytes, right_path)| {
         left_bytes
@@ -35,7 +72,7 @@ fn sample_mvt_paths(mut entries: Vec<MvtPath>) -> Vec<PathBuf> {
     });
 
     let len = entries.len();
-    if len <= SMALLEST_COUNT + MIDDLE_COUNT + LARGEST_COUNT {
+    if len <= SMALLEST_COUNT + MIDDLE_COUNT + large_count {
         return entries.into_iter().map(|(_, path)| path).collect();
     }
 
@@ -44,10 +81,10 @@ fn sample_mvt_paths(mut entries: Vec<MvtPath>) -> Vec<PathBuf> {
 
     let centered_middle_start = (len - MIDDLE_COUNT) / 2;
     let middle_start =
-        centered_middle_start.clamp(SMALLEST_COUNT, len - LARGEST_COUNT - MIDDLE_COUNT);
+        centered_middle_start.clamp(SMALLEST_COUNT, len - large_count - MIDDLE_COUNT);
     indices.extend(middle_start..middle_start + MIDDLE_COUNT);
 
-    indices.extend(len - LARGEST_COUNT..len);
+    indices.extend(len - large_count..len);
 
     indices.sort_unstable();
     indices.dedup();

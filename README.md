@@ -88,18 +88,22 @@ Run with `just bench-decode`:
 
 | Decoder      |    Time |     Compare |
 |--------------|--------:|------------:|
-| `fast-mvt`   |  228 ms |           - |
-| `tinymvt`    |  410 ms |  80% slower |
-| `mvt-reader` | 1148 ms | 403% slower |
+| `fast-mvt`   |  107 ms |           - |
+| `tinymvt`    |  199 ms |  1.9x slower |
+| `mvt-reader` |  629 ms |  5.9x slower |
 
 #### Encoding
 
 Run with `just bench-encode`:
 
+The `mvt` encoder benchmark omits the largest tiles because the crate's public
+encoding API has quadratic-or-worse behavior on large real-world tiles.
+
 | Encoder    |     Time |      Compare |
 |------------|---------:|-------------:|
-| `fast-mvt` |   987 ms |            - |
-| `mvt`      | 11549 ms | 1070% slower |
+| `tinymvt`  |  11.1 ms |  1.2x faster |
+| `fast-mvt` |  13.9 ms |            - |
+| `mvt`      |  19.0 ms |  1.4x slower |
 
 ## Features
 
