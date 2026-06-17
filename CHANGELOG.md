@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2](https://github.com/nyurik/fast-mvt/compare/v0.3.1...v0.3.2) - 2026-06-17
+
+### Other
+
+- CI release workflow
+- *(deps)* bump codecov/codecov-action ([#14](https://github.com/nyurik/fast-mvt/pull/14))
+- ignore generated files in codecov
+
 ## [0.3.1](https://github.com/nyurik/fast-mvt/compare/v0.3.0...v0.3.1) - 2026-06-12
 
 ### Other
