@@ -13,6 +13,21 @@ Geometry uses `geo-types` with `i32` coordinates. The crate does not project,
 scale, round, or handle floating point geometry coordinates; callers provide and
 receive tile-space integers.
 
+## Installation
+
+Install the `mvt` CLI from prebuilt release binaries with
+[cargo-binstall](https://github.com/cargo-bins/cargo-binstall):
+
+```bash
+cargo binstall fast-mvt
+```
+
+You can also build it from source:
+
+```bash
+cargo install fast-mvt --features cli --bin mvt
+```
+
 ## Decoding a tile
 
 ```rust

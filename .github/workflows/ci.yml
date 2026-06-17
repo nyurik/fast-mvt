@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag to upload binaries for, such as v0.3.1
+        required: false
+        type: string
 
 defaults:
   run:
@@ -87,6 +92,8 @@ jobs:
       contents: write
       id-token: write
       pull-requests: write
+    outputs:
+      releases_created: ${{ steps.release.outputs.releases_created }}
     concurrency:
       group: release-plz-${{ github.ref }}
       cancel-in-progress: false
@@ -106,3 +113,57 @@ jobs:
         with: { command: release-pr }
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+
+  upload-release-binaries:
+    needs: [ release-plz ]
+    if: |
+      always()
+      && (
+        (
+          needs.release-plz.result == 'success'
+          && needs.release-plz.outputs.releases_created == 'true'
+        )
+        || (
+          github.event_name == 'workflow_dispatch'
+          && inputs.release_tag != ''
+        )
+      )
+    name: Upload ${{ matrix.target }} binary
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: x86_64-apple-darwin
+            os: macos-13
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.sha }}
+      - uses: taiki-e/install-action@v2
+        with: { tool: just }
+      - name: Read package version
+        id: package
+        run: echo "version=$(just get-crate-field version)" >> "$GITHUB_OUTPUT"
+      - uses: taiki-e/upload-rust-binary-action@v1
+        with:
+          bin: mvt
+          package: fast-mvt
+          archive: fast-mvt-$target
+          features: cli
+          locked: false
+          target: ${{ matrix.target }}
+          tar: all
+          zip: none
+          checksum: sha256
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) || format('refs/tags/v{0}', steps.package.outputs.version) }}
