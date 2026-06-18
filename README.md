@@ -104,7 +104,7 @@ Encoding from an already parsed integer tile model:
 | `tinymvt`  |  14.8 ms | 58.0 MiB/s |  1.1x slower |
 | `mvt`      |  25.2 ms | 34.1 MiB/s | 1.9x slower* |
 
-Encoding from an owned tile value:
+Encoding from an owned tile value. Note that "owned" benchmark includes deep-cloning of each tile, so it makes no sense to compare throughput between the owned vs referenced table above, only between different encoders. Owned path is usually better.
 
 | Encoder    |     Time | Throughput |      Compare |
 |------------|---------:|-----------:|-------------:|
