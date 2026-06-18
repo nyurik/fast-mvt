@@ -5,6 +5,8 @@ main_crate := 'fast-mvt'
 just := quote(just_executable())
 # cargo-binstall needs a workaround due to caching when used in CI
 binstall_args := if env('CI', '') != '' {'--no-confirm --no-track --disable-telemetry'} else {''}
+# location of the coverage output, used by CI
+coverage_lcov := 'target/llvm-cov/lcov.info'
 
 # if running in CI, treat warnings as errors by setting RUSTFLAGS and RUSTDOCFLAGS to '-D warnings' unless they are already set
 # Use `CI=true just ci-test` to run the same tests as in GitHub CI.
@@ -29,11 +31,11 @@ check:
 mvt *args:
     cargo run --features cli --bin mvt -- {{args}}
 
-# Generate code coverage report to upload to codecov.io
+# Generate LCOV coverage report for CI to upload to codecov.io
 ci-coverage: env-info && \
-            (coverage '--codecov --output-path target/llvm-cov/codecov.info')
-    # ATTENTION: the full file path above is used in the CI workflow
-    mkdir -p target/llvm-cov
+        (_coverage '--lcov' '--output-path' coverage_lcov)
+    rm -rf {{quote(parent_directory(coverage_lcov))}}
+    mkdir -p {{quote(parent_directory(coverage_lcov))}}
 
 # Run all tests as expected by CI
 ci-test: env-info codegen-check fmt-check clippy test-feature-matrix bench-quick test-doc && assert-git-is-clean
@@ -51,14 +53,14 @@ clean:
 clippy *args:
     cargo clippy --workspace --all-features --all-targets {{args}}
 
-# Generate code coverage report. Will install `cargo llvm-cov` if missing.
-coverage *args='--no-clean --open':  (cargo-install 'cargo-llvm-cov')
-    cargo llvm-cov --workspace --all-features --all-targets --include-build-script {{args}}
+# Generate and open the HTML coverage report
+coverage: (_coverage '--open')
 
-# Generate LCOV coverage at target/llvm-cov/fast-mvt.lcov (requires cargo-llvm-cov)
-coverage-lcov:
-    mkdir -p target/llvm-cov
-    cargo llvm-cov --workspace --all-features --lcov --output-path target/llvm-cov/fast-mvt.lcov
+# Clean, collect, and aggregate coverage using the requested report arguments
+_coverage *report_args: (cargo-install 'cargo-llvm-cov')
+    cargo llvm-cov clean --workspace
+    cargo llvm-cov --workspace --all-features --all-targets --no-report
+    cargo llvm-cov report --include-build-script {{report_args}}
 
 # Build and open code documentation
 docs *args='--open':
@@ -67,9 +69,6 @@ docs *args='--open':
 # Run full Criterion benchmarks
 bench: bench-decode bench-encode
 
-# Compile and smoke-test benchmarks quickly, suitable for CI
-bench-quick: bench-decode-quick bench-encode-quick
-
 # Compare decoding speed between fast-mvt and mvt-reader
 bench-decode:
     cargo bench --bench decoder
@@ -77,6 +76,9 @@ bench-decode:
 # Compare encoding speed between fast-mvt and mvt
 bench-encode:
     cargo bench --bench encoder
+
+# Compile and smoke-test benchmarks quickly, suitable for CI
+bench-quick: bench-decode-quick bench-encode-quick
 
 # Compile and smoke-test the decode benchmark quickly, suitable for CI
 bench-decode-quick:
