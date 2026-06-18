@@ -23,7 +23,7 @@ required-features = ["reader"]
 [[bench]]
 name = "decoder"
 harness = false
-required-features = ["reader"]
+required-features = ["reader", "writer"]
 
 [[bench]]
 name = "encoder"
