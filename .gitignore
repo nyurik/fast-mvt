@@ -9,6 +9,3 @@ target/
 temp/
 tmp/
 venv/
-
-# This is a library, no lock
-Cargo.lock

@@ -63,7 +63,7 @@ fn write_tile() -> MvtResult<Vec<u8>> {
     let tile = MvtTileBuilder::new();
     let layer = tile.layer("places")?;
 
-    let mut feature = layer.feature(MvtGeometry::Point((1, 2).into()))?;
+    let mut feature = layer.feature(&MvtGeometry::Point((1, 2).into()))?;
     feature.id(Some(7));
     feature.tag("name", "Example")?;
     feature.tag("visible", true)?;
@@ -86,20 +86,33 @@ multiple independently built layer buffers can be concatenated to form a tile.
 
 Run with `just bench-decode`:
 
-| Decoder      |    Time |     Compare |
-|--------------|--------:|------------:|
-| `fast-mvt`   |  228 ms |           - |
-| `tinymvt`    |  410 ms |  80% slower |
-| `mvt-reader` | 1148 ms | 403% slower |
+| Decoder      |    Time |   Throughput |     Compare |
+|--------------|--------:|-------------:|------------:|
+| `fast-mvt`   |  108 ms |  142.9 MiB/s |           - |
+| `tinymvt`    |  196 ms |   78.5 MiB/s | 1.8x slower |
+| `mvt-reader` |  622 ms |   24.8 MiB/s | 5.8x slower |
 
 #### Encoding
 
 Run with `just bench-encode`:
 
-| Encoder    |     Time |      Compare |
-|------------|---------:|-------------:|
-| `fast-mvt` |   987 ms |            - |
-| `mvt`      | 11549 ms | 1070% slower |
+Encoding from an already parsed integer tile model:
+
+| Encoder    |     Time | Throughput |      Compare |
+|------------|---------:|-----------:|-------------:|
+| `fast-mvt` |  13.4 ms | 63.8 MiB/s |            - |
+| `tinymvt`  |  14.8 ms | 58.0 MiB/s |  1.1x slower |
+| `mvt`      |  25.2 ms | 34.1 MiB/s | 1.9x slower* |
+
+Encoding from an owned tile value. Note that "owned" benchmark includes deep-cloning of each tile, so it makes no sense to compare throughput between the owned vs referenced table above, only between different encoders. Owned path is usually better.
+
+| Encoder    |     Time | Throughput |      Compare |
+|------------|---------:|-----------:|-------------:|
+| `fast-mvt` |  19.3 ms | 44.3 MiB/s |            - |
+| `tinymvt`  |  24.4 ms | 35.2 MiB/s |  1.3x slower |
+| `mvt`      |  34.3 ms | 25.0 MiB/s | 1.8x slower* |
+
+\* The `mvt` encoder is broken for large real-world tiles, resulting in 100x slower performance.
 
 ## Features
 

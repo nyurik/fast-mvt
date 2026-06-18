@@ -4,8 +4,7 @@ use std::time::Duration;
 use criterion::measurement::WallTime;
 use criterion::{BenchmarkGroup, Criterion, Throughput, criterion_group, criterion_main};
 use fast_mvt::{
-    DEFAULT_EXTENT, MvtCoord, MvtGeometry, MvtLineString, MvtPolygon, MvtReaderRef, MvtTile,
-    MvtValue,
+    DEFAULT_EXTENT, MvtCoord, MvtGeometry, MvtLineString, MvtPolygon, MvtTile, MvtValue,
 };
 use geo_types::Geometry;
 use mvt::{GeomEncoder, GeomType};
@@ -17,31 +16,28 @@ use usize_cast::FromUsize;
 
 mod common;
 
-use common::load_repo_mvt_files;
+use common::{BenchTile, load_repo_mvt_files};
 
 fn bench_encode(c: &mut Criterion) {
-    let fixtures = load_repo_mvt_files();
-    let tiles = fixtures
-        .iter()
-        .map(|data| {
-            let tile = MvtReaderRef::new(data)
-                .and_then(|reader| reader.to_tile())
-                .expect("decode fixture");
-            BenchTile {
-                bytes: data.len(),
-                tile,
-            }
-        })
-        .collect::<Vec<_>>();
+    let tiles = load_repo_mvt_files(false);
 
     let mut group = c.benchmark_group("mvt encode");
     group.sample_size(10);
     group.measurement_time(Duration::from_secs(10));
-    bench_owned(&mut group, "fast-mvt encode", &tiles, |tile| {
+    bench_owned(&mut group, "fast-mvt owned encode", &tiles, |tile| {
         tile.clone().encode().expect("fast-mvt encode")
+    });
+    bench_owned(&mut group, "fast-mvt encode", &tiles, |tile| {
+        tile.encode_ref().expect("fast-mvt encode")
+    });
+    bench_owned(&mut group, "mvt owned encode", &tiles, |tile| {
+        encode_with_mvt(&black_box(tile.clone())).expect("mvt encode")
     });
     bench_owned(&mut group, "mvt encode", &tiles, |tile| {
         encode_with_mvt(tile).expect("mvt encode")
+    });
+    bench_owned(&mut group, "tinymvt owned encode", &tiles, |tile| {
+        encode_with_tinymvt(&black_box(tile.clone())).expect("tinymvt encode")
     });
     bench_owned(&mut group, "tinymvt encode", &tiles, |tile| {
         encode_with_tinymvt(tile).expect("tinymvt encode")
@@ -52,30 +48,21 @@ fn bench_encode(c: &mut Criterion) {
 criterion_group!(benches, bench_encode);
 criterion_main!(benches);
 
-#[derive(Clone)]
-struct BenchTile {
-    bytes: usize,
-    tile: MvtTile,
-}
-
 fn bench_owned<R>(
     group: &mut BenchmarkGroup<'_, WallTime>,
     name: &str,
     tiles: &[BenchTile],
     mut bench_fn: impl FnMut(&MvtTile) -> R,
 ) {
-    group.throughput(Throughput::Bytes(u64::from_usize(total_owned_bytes(tiles))));
+    let bytes = tiles.iter().map(|tile| tile.bytes).sum();
+    group.throughput(Throughput::Bytes(u64::from_usize(bytes)));
     group.bench_function(format!("{name} ({} tiles)", tiles.len()), |bench| {
         bench.iter(|| {
             for tile in tiles {
-                black_box(bench_fn(black_box(&tile.tile)));
+                black_box(bench_fn(black_box(&tile.parsed)));
             }
         });
     });
-}
-
-fn total_owned_bytes(tiles: &[BenchTile]) -> usize {
-    tiles.iter().map(|tile| tile.bytes).sum()
 }
 
 fn encode_with_tinymvt(tile: &MvtTile) -> Result<Vec<u8>, String> {

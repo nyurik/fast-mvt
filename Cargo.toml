@@ -8,7 +8,7 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 keywords = ["tile", "mvt", "map"]
 categories = ["science::geo"]
-exclude = [".github/*", ".gitignore", "fixtures/*", "fuzz/*", "justfile"]
+exclude = [".github/**", ".gitignore", "fixtures/**", "fuzz/**", "justfile"]
 rust-version = "1.87"
 
 [[bin]]
@@ -23,7 +23,7 @@ required-features = ["reader"]
 [[bench]]
 name = "decoder"
 harness = false
-required-features = ["reader"]
+required-features = ["reader", "writer"]
 
 [[bench]]
 name = "encoder"
@@ -44,7 +44,7 @@ cli = ["reader", "dep:clap"]
 arbitrary = { version = "1.4", features = ["derive"], optional = true }
 buffa = "0.7.1"
 clap = { version = "4", features = ["derive"], optional = true }
-dup-indexer = { version = "0.4.4", optional = true }
+dup-indexer = { version = "0.5.0", optional = true }
 geo-types = "0.7.19"
 serde = { version = "1.0.228", features = ["derive"], optional = true }
 serde_json = { version = "1.0.150", optional = true }

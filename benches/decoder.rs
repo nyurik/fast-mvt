@@ -12,10 +12,10 @@ use usize_cast::FromUsize;
 
 mod common;
 
-use common::load_repo_mvt_files;
+use common::{BenchTile, load_repo_mvt_files};
 
 fn bench_decode(c: &mut Criterion) {
-    let tiles = read_sample_data();
+    let tiles = load_repo_mvt_files(true);
 
     let mut group = c.benchmark_group("mvt decode");
     group.sample_size(10);
@@ -31,32 +31,18 @@ fn bench_decode(c: &mut Criterion) {
     group.finish();
 }
 
-fn read_sample_data() -> Vec<Vec<u8>> {
-    load_repo_mvt_files()
-        .into_iter()
-        .filter(|v| {
-            mvt_reader::Reader::new(v.clone())
-                .and_then(|vv| vv.get_layer_metadata().map(|_| ()))
-                .is_ok()
-        })
-        .collect::<Vec<_>>()
-}
-
 fn bench_tiles<R>(
     group: &mut BenchmarkGroup<'_, WallTime>,
     name: &str,
-    tiles: &[Vec<u8>],
+    tiles: &[BenchTile],
     mut bench_fn: impl FnMut(&[u8]) -> R,
 ) {
-    if tiles.is_empty() {
-        return;
-    }
-    let bytes: usize = tiles.iter().map(Vec::len).sum();
+    let bytes: usize = tiles.iter().map(|tile| tile.bytes).sum();
     group.throughput(Throughput::Bytes(u64::from_usize(bytes)));
     group.bench_function(format!("{name} ({} tiles)", tiles.len()), |bench| {
         bench.iter(|| {
-            for data in tiles {
-                black_box(bench_fn(black_box(data.as_slice())));
+            for tile in tiles {
+                black_box(bench_fn(black_box(tile.data.as_slice())));
             }
         });
     });
