@@ -1,15 +1,13 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use fast_mvt::{MvtReaderRef, MvtTile};
-
 type MvtPath = (u64, PathBuf);
 
-#[allow(dead_code)]
 pub struct BenchTile {
     pub bytes: usize,
+    #[allow(dead_code)]
     pub data: Vec<u8>,
-    pub parsed: MvtTile,
+    pub parsed: fast_mvt::MvtTile,
 }
 
 #[must_use]
@@ -41,7 +39,7 @@ pub fn load_repo_mvt_files(allow_large: bool) -> Vec<BenchTile> {
                 .is_ok()
         })
         .map(|(bytes, data)| {
-            let parsed = MvtReaderRef::new(&data)
+            let parsed = fast_mvt::MvtReaderRef::new(&data)
                 .and_then(|reader| reader.to_tile())
                 .expect("decode fixture");
             BenchTile {
