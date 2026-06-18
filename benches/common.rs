@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 
 type MvtPath = (u64, PathBuf);
 
+#[allow(dead_code)]
 pub struct BenchTile {
     pub bytes: usize,
-    #[allow(dead_code)]
     pub data: Vec<u8>,
     pub parsed: fast_mvt::MvtTile,
 }
