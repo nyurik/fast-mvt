@@ -86,34 +86,33 @@ multiple independently built layer buffers can be concatenated to form a tile.
 
 Run with `just bench-decode`:
 
-| Decoder      |    Time |     Compare |
-|--------------|--------:|------------:|
-| `fast-mvt`   |  106 ms |           - |
-| `tinymvt`    |  220 ms | 2.1x slower |
-| `mvt-reader` |  623 ms | 5.9x slower |
+| Decoder      |    Time |   Throughput |     Compare |
+|--------------|--------:|-------------:|------------:|
+| `fast-mvt`   |  108 ms |  142.9 MiB/s |           - |
+| `tinymvt`    |  196 ms |   78.5 MiB/s | 1.8x slower |
+| `mvt-reader` |  622 ms |   24.8 MiB/s | 5.8x slower |
 
 #### Encoding
 
 Run with `just bench-encode`:
 
-The `mvt` encoder benchmark omits the largest tiles because the crate's public
-encoding API has quadratic-or-worse behavior on large real-world tiles.
-
 Encoding from an already parsed integer tile model:
 
-| Encoder    |     Time |       Compare |
-|------------|---------:|--------------:|
-| `tinymvt`  |  14.6 ms |  1.04x faster |
-| `fast-mvt` |  15.1 ms |             - |
-| `mvt`      |  24.1 ms |   1.6x slower |
+| Encoder    |     Time | Throughput |      Compare |
+|------------|---------:|-----------:|-------------:|
+| `fast-mvt` |  13.4 ms | 63.8 MiB/s |            - |
+| `tinymvt`  |  14.8 ms | 58.0 MiB/s |  1.1x slower |
+| `mvt`      |  25.2 ms | 34.1 MiB/s | 1.9x slower* |
 
 Encoding from an owned tile value:
 
-| Encoder    |     Time |      Compare |
-|------------|---------:|-------------:|
-| `fast-mvt` |  21.4 ms |            - |
-| `tinymvt`  |  24.2 ms |  1.1x slower |
-| `mvt`      |  33.5 ms |  1.6x slower |
+| Encoder    |     Time | Throughput |      Compare |
+|------------|---------:|-----------:|-------------:|
+| `fast-mvt` |  19.3 ms | 44.3 MiB/s |            - |
+| `tinymvt`  |  24.4 ms | 35.2 MiB/s |  1.3x slower |
+| `mvt`      |  34.3 ms | 25.0 MiB/s | 1.8x slower* |
+
+\* The `mvt` encoder is broken for large real-world tiles, resulting in 100x slower performance.
 
 ## Features
 
