@@ -23,6 +23,28 @@ export RUST_BACKTRACE := env('RUST_BACKTRACE', if ci_mode == '1' {'1'} else {'0'
 build:
     cargo build --workspace --all-features --all-targets
 
+# Run full Criterion benchmarks
+bench: bench-decode bench-encode
+
+# Compare decoding speed between fast-mvt and mvt-reader
+bench-decode:
+    cargo bench --bench decoder
+
+# Compare encoding speed between fast-mvt and mvt
+bench-encode:
+    cargo bench --bench encoder
+
+# Compile and smoke-test benchmarks quickly, suitable for CI
+bench-quick: bench-decode-quick bench-encode-quick
+
+# Compile and smoke-test the decode benchmark quickly, suitable for CI
+bench-decode-quick:
+    cargo bench --bench decoder -- --test
+
+# Compile and smoke-test the encode benchmark quickly, suitable for CI
+bench-encode-quick:
+    cargo bench --bench encoder -- --test
+
 # Quick compile without building a binary
 check:
     cargo check --workspace --all-features --all-targets
@@ -38,11 +60,16 @@ ci-coverage: env-info && \
     mkdir -p {{quote(parent_directory(coverage_lcov))}}
 
 # Run all tests as expected by CI
-ci-test: env-info codegen-check fmt-check clippy test-feature-matrix bench-quick test-doc && assert-git-is-clean
+ci-test: env-info codegen-check test-fmt clippy test-feature-matrix bench-quick test-doc && assert-git-is-clean
 
-# Check formatting without changing files
-fmt-check: && (fmt-toml '--check' '--check-format')
-    cargo fmt --all -- --check
+# Compile default features with minimal dependencies on the configured MSRV
+ci-test-msrv:
+    {{just}} ci_mode=0 env-info _check-msrv-default
+    {{just}} assert-git-is-clean
+
+# Set toolchain and run ci-test-msrv
+ci-test-msrv-with-toolchain:
+    RUSTUP_TOOLCHAIN="$({{just}} get-msrv)" {{just}} ci-test-msrv
 
 # Clean all build artifacts
 clean:
@@ -65,28 +92,6 @@ _coverage *report_args: (cargo-install 'cargo-llvm-cov')
 # Build and open code documentation
 docs *args='--open':
     DOCS_RS=1 cargo doc --no-deps {{args}} --workspace --all-features
-
-# Run full Criterion benchmarks
-bench: bench-decode bench-encode
-
-# Compare decoding speed between fast-mvt and mvt-reader
-bench-decode:
-    cargo bench --bench decoder
-
-# Compare encoding speed between fast-mvt and mvt
-bench-encode:
-    cargo bench --bench encoder
-
-# Compile and smoke-test benchmarks quickly, suitable for CI
-bench-quick: bench-decode-quick bench-encode-quick
-
-# Compile and smoke-test the decode benchmark quickly, suitable for CI
-bench-decode-quick:
-    cargo bench --bench decoder -- --test
-
-# Compile and smoke-test the encode benchmark quickly, suitable for CI
-bench-encode-quick:
-    cargo bench --bench encoder -- --test
 
 # Regenerate protobuf bindings and fail if checked-in output changes
 codegen-check: update-generated assert-git-is-clean
@@ -125,23 +130,24 @@ fmt-toml *args:  (cargo-install 'cargo-sort')
 
 # Get a package field from the metadata
 get-crate-field field package=main_crate:  (assert-cmd 'jq')
-    @cargo metadata --format-version 1 | jq -e -r '.packages | map(select(.name == "{{package}}")) | first | .{{field}} // error("Field \"{{field}}\" is missing in Cargo.toml for package {{package}}")'
+    @cargo metadata --no-deps --format-version 1 | jq -e -r '.packages | map(select(.name == "{{package}}")) | first | .{{field}} // error("Field \"{{field}}\" is missing in Cargo.toml for package {{package}}")'
 
 # Get the minimum supported Rust version (MSRV) for the crate
 get-msrv package=main_crate:  (get-crate-field 'rust_version' package)
-
-# Compile default features with minimal dependencies on the configured MSRV
-ci-test-msrv:
-    RUSTUP_TOOLCHAIN="$({{just}} get-msrv)" {{just}} ci_mode=0 env-info _check-msrv-default
-    {{just}} assert-git-is-clean
 
 # Find the minimum supported Rust version (MSRV), update Cargo.toml, and test minimal dependencies
 msrv:  (cargo-install 'cargo-msrv')
     cargo msrv find --write-msrv --ignore-lockfile -- {{just}} _check-msrv-default
 
 # Compile the crate's default features using a dynamically generated minimal Cargo.lock
-[private]
 _check-msrv-default:  (cargo-install 'cargo-minimal-versions') (cargo-install 'cargo-hack')
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # cargo-msrv probes with rustup, but nested cargo subcommands may otherwise
+    # fall back to the default Cargo and emit flags unsupported by the candidate rustc.
+    toolchain="$(rustc --version | cut -d' ' -f2)"
+    export RUSTUP_TOOLCHAIN="$toolchain"
+    export CARGO="$(rustup which --toolchain "$toolchain" cargo)"
     cargo minimal-versions check --direct --package {{main_crate}}
 
 # Run cargo-release
@@ -152,7 +158,7 @@ release *args='':  (cargo-install 'release-plz')
 semver *args:  (cargo-install 'cargo-semver-checks')
     cargo semver-checks --all-features {{args}}
 
-# Run all unit and integration tests
+# Run all tests
 test:
     cargo test --workspace --all-features --all-targets
     cargo test --doc --workspace --all-features
