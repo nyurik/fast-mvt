@@ -63,7 +63,7 @@ fn write_tile() -> MvtResult<Vec<u8>> {
     let tile = MvtTileBuilder::new();
     let layer = tile.layer("places")?;
 
-    let mut feature = layer.feature(MvtGeometry::Point((1, 2).into()))?;
+    let mut feature = layer.feature(&MvtGeometry::Point((1, 2).into()))?;
     feature.id(Some(7));
     feature.tag("name", "Example")?;
     feature.tag("visible", true)?;
