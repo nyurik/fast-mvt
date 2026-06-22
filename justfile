@@ -55,7 +55,7 @@ mvt *args:
 
 # Generate LCOV coverage report for CI to upload to codecov.io
 ci-coverage: env-info && \
-        (_coverage '--lcov' '--output-path' coverage_lcov)
+        (_coverage '--lcov' '--output-path' quote(coverage_lcov))
     rm -rf {{quote(parent_directory(coverage_lcov))}}
     mkdir -p {{quote(parent_directory(coverage_lcov))}}
 
@@ -81,12 +81,12 @@ clippy *args:
     cargo clippy --workspace --all-features --all-targets {{args}}
 
 # Generate and open the HTML coverage report
-coverage: (_coverage '--open')
+coverage:  (_coverage '--open')
 
 # Clean, collect, and aggregate coverage using the requested report arguments
-_coverage *report_args: (cargo-install 'cargo-llvm-cov')
+_coverage *report_args:  (cargo-install 'cargo-llvm-cov')
     cargo llvm-cov clean --workspace
-    cargo llvm-cov --workspace --all-features --all-targets --no-report
+    cargo llvm-cov --no-report --workspace --all-features --all-targets
     cargo llvm-cov report --include-build-script {{report_args}}
 
 # Build and open code documentation
