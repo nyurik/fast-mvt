@@ -1,7 +1,7 @@
 use geo_types::{Coord, LineString, MultiLineString, MultiPoint, MultiPolygon, Point, Polygon};
 
+use crate::generated::vector_tile::tile::GeomType;
 use crate::geom::{Command, signed_area};
-use crate::proto::GeomType;
 use crate::{MvtCoord, MvtError, MvtGeometry, MvtLineString, MvtResult};
 
 pub(crate) fn decode_geometry(

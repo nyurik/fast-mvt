@@ -433,6 +433,7 @@ mod tests_json {
     use serde_json::json;
 
     use super::*;
+    use crate::generated::vector_tile::Tile;
 
     #[test]
     fn mvt_values_convert_to_json_values() {
@@ -492,5 +493,30 @@ mod tests_json {
             MvtValue::try_from(json!({})),
             Err(MvtJsonValueError::UnsupportedJsonObject)
         );
+    }
+
+    #[test]
+    fn tile_deserializes_from_object_but_not_layers_array() {
+        let object: Tile = serde_json::from_str(
+            r#"{
+                "layers": [{
+                    "version": 2,
+                    "name": "places",
+                    "extent": 4096
+                }]
+            }"#,
+        )
+        .unwrap();
+
+        let array = serde_json::from_str::<Tile>(
+            r#"[{
+                "version": 2,
+                "name": "places",
+                "extent": 4096
+            }]"#,
+        );
+
+        assert!(array.is_err());
+        assert_eq!(object.layers[0].name, "places");
     }
 }
