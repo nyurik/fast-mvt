@@ -32,17 +32,16 @@ required-features = ["reader", "writer"]
 
 [features]
 default = ["reader", "writer", "json"]
-reader = ["views"]
+reader = []
 writer = ["dep:dup-indexer"]
 json = ["dep:serde", "dep:serde_json", "buffa/json"]
-views = []
 codegen = ["dep:buffa-build"]
 arbitrary = ["dep:arbitrary", "buffa/arbitrary"]
 cli = ["reader", "dep:clap"]
 
 [dependencies]
 arbitrary = { version = "1.4", features = ["derive"], optional = true }
-buffa = "0.7.1"
+buffa = "0.8.1"
 clap = { version = "4", features = ["derive"], optional = true }
 dup-indexer = { version = "0.5.0", optional = true }
 geo-types = "0.7.19"
@@ -52,7 +51,7 @@ thiserror = "2.0.11"
 usize_cast = "1.1.0"
 
 [build-dependencies]
-buffa-build = { version = "0.7.0", optional = true }
+buffa-build = { version = "0.8.1", optional = true }
 
 [dev-dependencies]
 anyhow = "1"

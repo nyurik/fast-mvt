@@ -12,6 +12,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .generate_arbitrary(true)
         .gate_impls_on_crate_features(true)
         .preserve_unknown_fields(false)
+        .views_feature_name("reader")
         .compile()
 }
 

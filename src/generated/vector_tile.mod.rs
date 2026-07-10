@@ -15,7 +15,7 @@ include!("vector_tile.rs");
 pub mod __buffa {
     #[allow(unused_imports)]
     use super::*;
-    #[cfg(feature = "views")]
+    #[cfg(feature = "reader")]
     pub mod view {
         #[allow(unused_imports)]
         use super::*;
@@ -31,10 +31,10 @@ pub mod __buffa {
         #[cfg(feature = "json")] reg.register_json_any(super::tile::__LAYER_JSON_ANY);
     }
 }
-#[cfg(feature = "views")]
+#[cfg(feature = "reader")]
 #[doc(inline)]
 pub use self::__buffa::view::TileView;
-#[cfg(feature = "views")]
+#[cfg(feature = "reader")]
 #[doc(inline)]
 pub use self::__buffa::view::TileOwnedView;
 #[cfg(feature = "json")]

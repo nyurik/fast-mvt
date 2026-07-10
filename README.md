@@ -123,7 +123,6 @@ Encoding from an owned tile value. Note that "owned" benchmark includes deep-clo
 | `json`      | Enable serde JSON support.                                              |
 | `codegen`   | Regenerate checked-in protobuf bindings from `src/vector_tile.proto`.   |
 | `arbitrary` | Derive `arbitrary::Arbitrary` for generated protobuf types for fuzzing. |
-| `views`     | Internal feature, do not use. Must be here due to buffa limitations.    |
 
 The generated protobuf files are checked in, so normal builds do not require
 `protoc`. Run `just update-generated` to refresh generated code after `buffa` upgrades.
