@@ -1,5 +1,5 @@
+use crate::generated::vector_tile::tile::GeomType;
 use crate::geom::{Command, signed_area};
-use crate::proto::GeomType;
 use crate::{MvtCoord, MvtError, MvtGeometry, MvtLineString, MvtPolygon, MvtResult};
 
 pub(crate) fn encode_parameter(value: i32) -> u32 {

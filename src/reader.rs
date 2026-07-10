@@ -3,10 +3,21 @@ use std::num::NonZeroU32;
 use buffa::{Enumeration as _, MessageView as _};
 use usize_cast::IntoUsize;
 
-use crate::generated::vector_tile::{TileView, tile as proto_tile};
+use crate::generated::vector_tile::{Tile, TileView, tile as proto_tile};
 use crate::geom_reader::decode_geometry;
 use crate::types::{DEFAULT_EXTENT, MvtFeature, MvtLayer, MvtTile, MvtValue};
 use crate::{MvtError, MvtGeometry, MvtResult};
+
+impl Tile {
+    #[must_use]
+    pub fn from_reader(reader: &MvtReaderRef<'_>) -> Self {
+        let mut tile = reader.to_proto();
+        for layer in &mut tile.layers {
+            layer.extent.get_or_insert(DEFAULT_EXTENT.get());
+        }
+        tile
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct MvtReaderRef<'a>(TileView<'a>);
@@ -37,7 +48,7 @@ impl<'a> MvtReaderRef<'a> {
     }
 
     #[must_use]
-    pub fn to_proto(&self) -> crate::generated::vector_tile::Tile {
+    pub fn to_proto(&self) -> Tile {
         self.0.to_owned_message()
     }
 }
@@ -266,7 +277,7 @@ mod tests {
 
     #[allow(clippy::disallowed_methods)]
     fn reader_from_layer(layer: proto_tile::Layer) -> MvtReaderRef<'static> {
-        let bytes = crate::generated::vector_tile::Tile {
+        let bytes = Tile {
             layers: vec![layer],
         }
         .encode_to_vec();
@@ -462,7 +473,7 @@ mod tests {
             name: "bad".into(),
             ..Default::default()
         };
-        let bytes = crate::generated::vector_tile::Tile {
+        let bytes = Tile {
             layers: vec![layer.clone()],
         }
         .encode_to_vec();

@@ -23,8 +23,10 @@ mod geom_writer;
     unused_qualifications,
 )]
 mod generated;
-
-pub mod proto;
+pub mod proto {
+    pub use crate::generated::vector_tile::Tile;
+    pub use crate::generated::vector_tile::tile::{Feature, GeomType, Layer, Value};
+}
 
 #[cfg(feature = "json")]
 pub use serde_json;
