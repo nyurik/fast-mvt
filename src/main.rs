@@ -42,10 +42,12 @@ fn dump_file(file: PathBuf) -> MvtResult<()> {
 
 fn dump_reader(writer: &MvtReaderRef<'_>, out: &mut impl io::Write) -> MvtResult<()> {
     for (layer_index, layer) in writer.layers().enumerate() {
-        writeln!(
-            out,
-            "============================================================="
-        )?;
+        if layer_index > 0 {
+            writeln!(
+                out,
+                "============================================================="
+            )?;
+        }
         writeln!(out, "layer: {layer_index}")?;
         writeln!(out, "  name: {}", layer.name())?;
         writeln!(out, "  version: {}", layer.version())?;
@@ -59,13 +61,16 @@ fn dump_reader(writer: &MvtReaderRef<'_>, out: &mut impl io::Write) -> MvtResult
                 None => writeln!(out, "(none)")?,
             }
             let geom_type = format_geom_type(feature.geom_type());
-            writeln!(out, "    geomtype: {geom_type}")?;
-            writeln!(out, "    geometry:")?;
+            writeln!(out, "    geometry: {geom_type}")?;
             write_geometry(out, &feature.geometry()?)?;
             writeln!(out, "    properties:")?;
             for property in feature.properties() {
                 let (key, value) = property?;
-                writeln!(out, "      {key}={}", format_value(value))?;
+                let type_hint = match value_type(value) {
+                    Some(ty) => format!(" ({ty})"),
+                    None => String::new(),
+                };
+                writeln!(out, "      {key}{type_hint} = {}", format_value(value))?;
             }
         }
     }
@@ -78,6 +83,19 @@ fn format_geom_type(value: Option<GeomType>) -> &'static str {
         Some(GeomType::Linestring) => "linestring",
         Some(GeomType::Polygon) => "polygon",
         Some(GeomType::Unknown) | None => "unknown",
+    }
+}
+
+fn value_type(value: MvtValueRef<'_>) -> Option<&'static str> {
+    match value {
+        MvtValueRef::String(_) => None,
+        MvtValueRef::Float(_) => Some("float"),
+        MvtValueRef::Double(_) => Some("double"),
+        MvtValueRef::Int(_) => Some("int"),
+        MvtValueRef::UInt(_) => Some("uint"),
+        MvtValueRef::SInt(_) => Some("sint"),
+        MvtValueRef::Bool(_) => Some("bool"),
+        MvtValueRef::Null => Some("null"),
     }
 }
 
@@ -196,10 +214,10 @@ mod tests {
         assert!(out.contains("  name: places"));
         assert!(out.contains("  feature: 0"));
         assert!(out.contains("    id: (none)"));
-        assert!(out.contains("    geomtype: point"));
+        assert!(out.contains("    geometry: point"));
         assert!(out.contains("      POINT(1,2)"));
-        assert!(out.contains("      name=\"Example\""));
-        assert!(out.contains("      visible=true"));
+        assert!(out.contains("      name = \"Example\""));
+        assert!(out.contains("      visible (bool) = true"));
     }
 
     #[test]
@@ -232,6 +250,15 @@ mod tests {
         assert_eq!(format_value(MvtValueRef::SInt(-5)), "-5");
         assert_eq!(format_value(MvtValueRef::Bool(true)), "true");
         assert_eq!(format_value(MvtValueRef::Null), "null");
+
+        assert_eq!(value_type(MvtValueRef::String("x")), None);
+        assert_eq!(value_type(MvtValueRef::Float(1.25)), Some("float"));
+        assert_eq!(value_type(MvtValueRef::Double(2.5)), Some("double"));
+        assert_eq!(value_type(MvtValueRef::Int(-3)), Some("int"));
+        assert_eq!(value_type(MvtValueRef::UInt(4)), Some("uint"));
+        assert_eq!(value_type(MvtValueRef::SInt(-5)), Some("sint"));
+        assert_eq!(value_type(MvtValueRef::Bool(true)), Some("bool"));
+        assert_eq!(value_type(MvtValueRef::Null), Some("null"));
 
         let mut out = Vec::new();
         write_geometry(

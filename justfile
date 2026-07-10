@@ -52,6 +52,10 @@ check:
 mvt *args:
     cargo run --features cli --bin mvt -- {{args}}
 
+# Dump the all-property-types insta fixture and ensure it left the repo unchanged
+dump-fixture: && assert-git-is-clean
+    {{just}} mvt dump tests/snapshots/dump_fixture__all_property_types.snap.mvt > tests/snapshots/dump_fixture__all_property_types.snap.mvt.txt
+
 # Generate LCOV coverage report for CI to upload to codecov.io
 ci-coverage: env-info && \
         (_coverage '--lcov' '--output-path' quote(coverage_lcov))
@@ -59,7 +63,7 @@ ci-coverage: env-info && \
     mkdir -p {{quote(parent_directory(coverage_lcov))}}
 
 # Run all tests as expected by CI
-ci-test: env-info codegen-check test-fmt clippy test-feature-matrix bench-quick test-doc && assert-git-is-clean
+ci-test: env-info codegen-check test-fmt clippy test-feature-matrix bench-quick test-doc dump-fixture && assert-git-is-clean
 
 # Compile default features with minimal dependencies on the configured MSRV
 ci-test-msrv:
