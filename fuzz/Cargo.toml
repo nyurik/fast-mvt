@@ -32,6 +32,7 @@ unused_qualifications = "warn"
 
 [lints.clippy]
 # Restrictions
+disallowed_methods = "forbid"
 panic_in_result_fn = "warn"
 todo = "warn"
 unimplemented = "warn"

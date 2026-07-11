@@ -1,6 +1,6 @@
 ---
 source: tests/dump_fixture.rs
-expression: bytes
+expression: bytes.clone()
 extension: mvt
 snapshot_kind: binary
 ---
