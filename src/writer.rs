@@ -254,13 +254,17 @@ fn u32_index(value: usize) -> MvtResult<u32> {
 
 #[cfg(test)]
 mod tests {
+    use geo_types::point;
+
     use super::*;
     use crate::MvtGeometry;
 
     #[test]
     fn layer_builder_deduplicates_keys_and_values() {
         let layer = MvtTileBuilder::new().layer("layer").unwrap();
-        let mut feature = layer.feature(&MvtGeometry::Point((1, 2).into())).unwrap();
+        let mut feature = layer
+            .feature(&MvtGeometry::Point(point! { x: 1, y: 2 }))
+            .unwrap();
         feature.tag("foo", MvtValue::String("bar".into())).unwrap();
         feature.tag("foo", MvtValue::String("baz".into())).unwrap();
         feature.tag("bar", MvtValue::String("bar".into())).unwrap();
@@ -279,7 +283,9 @@ mod tests {
     fn encode_appends_and_validates_tile_metadata() {
         let tile = MvtTileBuilder::new();
         let layer = tile.layer("layer").unwrap();
-        let mut feature = layer.feature(&MvtGeometry::Point((1, 2).into())).unwrap();
+        let mut feature = layer
+            .feature(&MvtGeometry::Point(point! { x: 1, y: 2 }))
+            .unwrap();
         feature.id(Some(1));
         feature.tag("skip", MvtValue::Null).unwrap();
         let layer = feature.finish();
@@ -290,7 +296,9 @@ mod tests {
 
         let tile = MvtTileBuilder::new();
         let layer = tile.layer("layer").unwrap();
-        let mut feature = layer.feature(&MvtGeometry::Point((1, 2).into())).unwrap();
+        let mut feature = layer
+            .feature(&MvtGeometry::Point(point! { x: 1, y: 2 }))
+            .unwrap();
         feature.id(Some(1));
         let layer = feature.finish();
         let tile = layer.finish();
@@ -306,7 +314,7 @@ mod tests {
 
     #[test]
     fn encode_ref_matches_owned_encode() {
-        let mut feature = crate::MvtFeature::new(MvtGeometry::Point((1, 2).into()));
+        let mut feature = crate::MvtFeature::new(MvtGeometry::Point(point! { x: 1, y: 2 }));
         feature.set_id(7);
         feature.add_tag_string("name", "Example");
         feature.add_tag_bool("visible", true);

@@ -86,29 +86,3 @@ impl fmt::Debug for MvtLayerRef<'_> {
         Ok(())
     }
 }
-
-#[cfg(all(test, feature = "writer"))]
-mod writer_tests {
-    use crate::{MvtGeometry, MvtReaderRef, MvtTileBuilder};
-
-    #[test]
-    fn layer_ref_debug_renders_a_self_contained_block() {
-        let mut feature = MvtTileBuilder::new()
-            .layer("places")
-            .unwrap()
-            .feature(&MvtGeometry::Point((1, 2).into()))
-            .unwrap();
-        feature.id(Some(7));
-        let bytes = feature.finish().finish().finish();
-
-        let reader = MvtReaderRef::new(&bytes).expect("valid MVT bytes");
-        let layer = reader.layers().next().unwrap();
-
-        // A layer's `Debug` composes the per-feature `Debug`, each line
-        // newline-terminated.
-        assert_eq!(
-            format!("{layer:?}"),
-            "  name: places\n  version: 2\n  extent: 4096\n  feature: 0\n    id: 7\n    geometry: point\n      POINT(1,2)\n    properties:\n"
-        );
-    }
-}

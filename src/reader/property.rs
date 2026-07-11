@@ -68,34 +68,19 @@ impl MvtValueRef<'_> {
             Self::Null => MvtValue::Null,
         }
     }
-
-    /// The MVT type annotation used by the dump, or `None` for strings (whose
-    /// quoting already makes the type obvious).
-    pub(super) fn type_name(self) -> Option<&'static str> {
-        match self {
-            Self::String(_) => None,
-            Self::Float(_) => Some("float"),
-            Self::Double(_) => Some("double"),
-            Self::Int(_) => Some("int"),
-            Self::UInt(_) => Some("uint"),
-            Self::SInt(_) => Some("sint"),
-            Self::Bool(_) => Some("bool"),
-            Self::Null => Some("null"),
-        }
-    }
 }
 
 impl fmt::Debug for MvtValueRef<'_> {
-    /// Renders the bare textual value (strings quoted), without the variant
-    /// name — the type is surfaced separately by [`MvtValueRef::type_name`].
+    /// Renders the bare textual value (strings quoted)
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             MvtValueRef::String(value) => write!(f, "{value:?}"),
-            MvtValueRef::Float(value) => write!(f, "{value}"),
-            MvtValueRef::Double(value) => write!(f, "{value}"),
-            MvtValueRef::Int(value) | MvtValueRef::SInt(value) => write!(f, "{value}"),
-            MvtValueRef::UInt(value) => write!(f, "{value}"),
-            MvtValueRef::Bool(value) => write!(f, "{value}"),
+            MvtValueRef::Float(value) => write!(f, "{value} (float)"),
+            MvtValueRef::Double(value) => write!(f, "{value} (double)"),
+            MvtValueRef::Int(value) => write!(f, "{value} (int)"),
+            MvtValueRef::SInt(value) => write!(f, "{value} (sint)"),
+            MvtValueRef::UInt(value) => write!(f, "{value} (uint)"),
+            MvtValueRef::Bool(value) => write!(f, "{value} (bool)"),
             MvtValueRef::Null => f.write_str("null"),
         }
     }
@@ -128,26 +113,14 @@ mod tests {
 
     #[test]
     fn value_ref_debug_renders_bare_values() {
-        assert_eq!(format!("{:?}", MvtValueRef::String("x")), "\"x\"");
-        assert_eq!(format!("{:?}", MvtValueRef::Float(1.25)), "1.25");
-        assert_eq!(format!("{:?}", MvtValueRef::Double(2.5)), "2.5");
-        assert_eq!(format!("{:?}", MvtValueRef::Int(-3)), "-3");
-        assert_eq!(format!("{:?}", MvtValueRef::UInt(4)), "4");
-        assert_eq!(format!("{:?}", MvtValueRef::SInt(-5)), "-5");
-        assert_eq!(format!("{:?}", MvtValueRef::Bool(true)), "true");
-        assert_eq!(format!("{:?}", MvtValueRef::Null), "null");
-    }
-
-    #[test]
-    fn value_ref_type_name_covers_every_variant() {
-        assert_eq!(MvtValueRef::String("x").type_name(), None);
-        assert_eq!(MvtValueRef::Float(1.25).type_name(), Some("float"));
-        assert_eq!(MvtValueRef::Double(2.5).type_name(), Some("double"));
-        assert_eq!(MvtValueRef::Int(-3).type_name(), Some("int"));
-        assert_eq!(MvtValueRef::UInt(4).type_name(), Some("uint"));
-        assert_eq!(MvtValueRef::SInt(-5).type_name(), Some("sint"));
-        assert_eq!(MvtValueRef::Bool(true).type_name(), Some("bool"));
-        assert_eq!(MvtValueRef::Null.type_name(), Some("null"));
+        insta::assert_debug_snapshot!(MvtValueRef::String("x"), @r#""x""#);
+        insta::assert_debug_snapshot!(MvtValueRef::Float(1.25), @"1.25 (float)");
+        insta::assert_debug_snapshot!(MvtValueRef::Double(2.5), @"2.5 (double)");
+        insta::assert_debug_snapshot!(MvtValueRef::Int(-3), @"-3 (int)");
+        insta::assert_debug_snapshot!(MvtValueRef::UInt(4), @"4 (uint)");
+        insta::assert_debug_snapshot!(MvtValueRef::SInt(-5), @"-5 (sint)");
+        insta::assert_debug_snapshot!(MvtValueRef::Bool(true), @"true (bool)");
+        insta::assert_debug_snapshot!(MvtValueRef::Null, @"null");
     }
 
     #[test]

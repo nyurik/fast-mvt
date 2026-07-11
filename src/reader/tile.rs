@@ -167,6 +167,7 @@ mod tests {
 
         let feature = layer.features().next().unwrap();
         assert_eq!(feature.id(), Some(7));
+        assert!(feature.has_properties());
         assert_eq!(
             feature.tags(),
             [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7]
@@ -232,85 +233,5 @@ mod tests {
         let reader = reader_from_layer(layer);
         let feature = reader.layers().next().unwrap().features().next().unwrap();
         assert!(matches!(feature.geometry(), Err(MvtError::InvalidGeometry)));
-    }
-}
-
-#[cfg(all(test, feature = "writer"))]
-mod writer_tests {
-    use geo_types::{LineString, Polygon};
-
-    use super::MvtReaderRef;
-    use crate::{MvtGeometry, MvtTileBuilder};
-
-    fn dump(bytes: &[u8]) -> String {
-        format!("{:?}", MvtReaderRef::new(bytes).expect("valid MVT bytes"))
-    }
-
-    #[test]
-    fn dumps_point_feature_with_typed_properties() {
-        let mut feature = MvtTileBuilder::new()
-            .layer("places")
-            .unwrap()
-            .feature(&MvtGeometry::Point((1, 2).into()))
-            .unwrap();
-        feature.id(Some(7));
-        feature.tag_string("name", "Example").unwrap();
-        feature.tag_bool("visible", true).unwrap();
-        feature.tag_int("count", -3).unwrap();
-        let bytes = feature.finish().finish().finish();
-
-        let out = dump(&bytes);
-        assert!(out.contains("layer: 0"), "{out}");
-        assert!(out.contains("  name: places"), "{out}");
-        assert!(out.contains("    id: 7"), "{out}");
-        assert!(out.contains("    geometry: point"), "{out}");
-        assert!(out.contains("      POINT(1,2)"), "{out}");
-        assert!(out.contains("      name = \"Example\""), "{out}");
-        assert!(out.contains("      visible (bool) = true"), "{out}");
-        assert!(out.contains("      count (int) = -3"), "{out}");
-        // Each line is newline-terminated; the CLI uses `write!` to avoid
-        // doubling the final newline.
-        assert!(out.ends_with('\n'), "{out}");
-    }
-
-    #[test]
-    fn dumps_polygon_rings_and_separates_layers() {
-        let polygon = Polygon::new(
-            LineString(vec![
-                (0, 0).into(),
-                (10, 0).into(),
-                (10, 10).into(),
-                (0, 0).into(),
-            ]),
-            vec![LineString(vec![
-                (2, 2).into(),
-                (4, 2).into(),
-                (4, 4).into(),
-                (2, 2).into(),
-            ])],
-        );
-        let bytes = MvtTileBuilder::new()
-            .layer("a")
-            .unwrap()
-            .feature(&MvtGeometry::Polygon(polygon))
-            .unwrap()
-            .finish()
-            .finish()
-            .layer("b")
-            .unwrap()
-            .feature(&MvtGeometry::Point((1, 2).into()))
-            .unwrap()
-            .finish()
-            .finish()
-            .finish();
-
-        let out = dump(&bytes);
-        assert!(out.contains("    geometry: polygon"), "{out}");
-        assert!(out.contains("[OUTER]"), "{out}");
-        assert!(out.contains("[INNER]"), "{out}");
-        assert!(
-            out.contains("=============================================================\nlayer: 1"),
-            "{out}"
-        );
     }
 }

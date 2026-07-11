@@ -4,7 +4,7 @@
 #![cfg(all(feature = "reader", feature = "writer"))]
 
 use fast_mvt::{MvtGeometry, MvtReaderRef, MvtResult, MvtTileBuilder, MvtValue};
-use geo_types::{LineString, MultiLineString, MultiPoint, MultiPolygon, Point, Polygon};
+use geo_types::{MultiLineString, MultiPoint, MultiPolygon, line_string, point, polygon};
 
 /// Cover every writable property type and every geometry type, and probe the
 /// two edge cases the reader exposes:
@@ -21,7 +21,7 @@ fn tile_with_every_property_and_geometry_type() -> MvtResult<()> {
     // an id and a null tag that the builder silently drops.
     let mut feature = MvtTileBuilder::new()
         .layer("everything")?
-        .feature(&MvtGeometry::Point(Point::new(10, 20)))?;
+        .feature(&MvtGeometry::Point(point! { x: 10, y: 20 }))?;
     feature
         .id(Some(1))
         .tag_string("string", "hello")?
@@ -41,67 +41,35 @@ fn tile_with_every_property_and_geometry_type() -> MvtResult<()> {
 
     // One feature per remaining geometry type; the linestring omits its id.
     let mut feature = layer.feature(&MvtGeometry::MultiPoint(MultiPoint(vec![
-        Point::new(1, 2),
-        Point::new(3, 4),
+        point! { x: 1, y: 2 },
+        point! { x: 3, y: 4 },
     ])))?;
     feature.id(Some(2));
     let layer = feature.finish();
 
     let layer = layer
-        .feature(&MvtGeometry::LineString(LineString(vec![
-            (0, 0).into(),
-            (5, 5).into(),
-            (10, 0).into(),
-        ])))?
+        .feature(&MvtGeometry::LineString(
+            line_string![(x: 0, y: 0), (x: 5, y: 5), (x: 10, y: 0)],
+        ))?
         .finish();
 
     let mut feature = layer.feature(&MvtGeometry::MultiLineString(MultiLineString(vec![
-        LineString(vec![(0, 0).into(), (1, 1).into()]),
-        LineString(vec![(2, 2).into(), (3, 3).into()]),
+        line_string![(x: 0, y: 0), (x: 1, y: 1)],
+        line_string![(x: 2, y: 2), (x: 3, y: 3)],
     ])))?;
     feature.id(Some(4));
     let layer = feature.finish();
 
-    let mut feature = layer.feature(&MvtGeometry::Polygon(Polygon::new(
-        LineString(vec![
-            (0, 0).into(),
-            (10, 0).into(),
-            (10, 10).into(),
-            (0, 10).into(),
-            (0, 0).into(),
-        ]),
-        vec![LineString(vec![
-            (3, 3).into(),
-            (3, 6).into(),
-            (6, 6).into(),
-            (6, 3).into(),
-            (3, 3).into(),
-        ])],
+    let mut feature = layer.feature(&MvtGeometry::Polygon(polygon!(
+        exterior: [(x: 0, y: 0), (x: 10, y: 0), (x: 10, y: 10), (x: 0, y: 10), (x: 0, y: 0)],
+        interiors: [[(x: 3, y: 3), (x: 3, y: 6), (x: 6, y: 6), (x: 6, y: 3), (x: 3, y: 3)]],
     )))?;
     feature.id(Some(5));
     let layer = feature.finish();
 
     let mut feature = layer.feature(&MvtGeometry::MultiPolygon(MultiPolygon(vec![
-        Polygon::new(
-            LineString(vec![
-                (0, 0).into(),
-                (4, 0).into(),
-                (4, 4).into(),
-                (0, 4).into(),
-                (0, 0).into(),
-            ]),
-            vec![],
-        ),
-        Polygon::new(
-            LineString(vec![
-                (6, 6).into(),
-                (9, 6).into(),
-                (9, 9).into(),
-                (6, 9).into(),
-                (6, 6).into(),
-            ]),
-            vec![],
-        ),
+        polygon![(x: 0, y: 0), (x: 4, y: 0), (x: 4, y: 4), (x: 0, y: 4), (x: 0, y: 0)],
+        polygon![(x: 6, y: 6), (x: 9, y: 6), (x: 9, y: 9), (x: 6, y: 9), (x: 6, y: 6)],
     ])))?;
     feature.id(Some(6));
     let layer = feature.finish();
@@ -111,52 +79,50 @@ fn tile_with_every_property_and_geometry_type() -> MvtResult<()> {
     insta::assert_binary_snapshot!("tile.mvt", bytes.clone());
 
     let reader = MvtReaderRef::new(&bytes)?;
-    insta::assert_snapshot!(format!("{reader:?}"), @r#"
+    insta::assert_debug_snapshot!(reader, @r#"
     layer: 0
       name: everything
       version: 2
       extent: 4096
       feature: 0
         id: 1
-        geometry: point
-          POINT(10,20)
+        geometry: POINT(10,20)
         properties:
           string = "hello"
-          float (float) = 1.25
-          double (double) = 2.5
-          int (int) = -3
-          uint (uint) = 4
-          sint (sint) = -5
-          bool (bool) = true
+          float = 1.25 (float)
+          double = 2.5 (double)
+          int = -3 (int)
+          uint = 4 (uint)
+          sint = -5 (sint)
+          bool = true (bool)
       feature: 1
         id: 2
-        geometry: point
+        geometry:
           POINT(1,2)
           POINT(3,4)
-        properties:
+        properties: (none)
       feature: 2
         id: (none)
-        geometry: linestring
-          LINESTRING[count=3](0 0,5 5,10 0)
-        properties:
+        geometry: LINESTRING[count=3](0 0,5 5,10 0)
+        properties: (none)
       feature: 3
         id: 4
-        geometry: linestring
+        geometry:
           LINESTRING[count=2](0 0,1 1)
           LINESTRING[count=2](2 2,3 3)
-        properties:
+        properties: (none)
       feature: 4
         id: 5
-        geometry: polygon
+        geometry:
           RING[count=5](0 0,10 0,10 10,0 10,0 0)[OUTER]
           RING[count=5](3 3,3 6,6 6,6 3,3 3)[INNER]
-        properties:
+        properties: (none)
       feature: 5
         id: 6
-        geometry: polygon
+        geometry:
           RING[count=5](0 0,4 0,4 4,0 4,0 0)[OUTER]
           RING[count=5](6 6,9 6,9 9,6 9,6 6)[OUTER]
-        properties:
+        properties: (none)
     "#);
     Ok(())
 }

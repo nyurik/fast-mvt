@@ -48,6 +48,11 @@ impl<'a> MvtFeatureRef<'a> {
     }
 
     #[must_use]
+    pub fn has_properties(self) -> bool {
+        !self.feature.tags.is_empty()
+    }
+
+    #[must_use]
     pub fn properties(self) -> MvtPropertyIter<'a> {
         MvtPropertyIter::new(
             &self.layer.keys,
@@ -83,73 +88,69 @@ impl fmt::Debug for MvtFeatureRef<'_> {
             Some(id) => writeln!(f, "    id: {id}")?,
             None => writeln!(f, "    id: (none)")?,
         }
-        writeln!(
-            f,
-            "    geometry: {}",
-            match self.geom_type() {
-                Some(proto_tile::GeomType::Point) => "point",
-                Some(proto_tile::GeomType::Linestring) => "linestring",
-                Some(proto_tile::GeomType::Polygon) => "polygon",
-                Some(proto_tile::GeomType::Unknown) | None => "unknown",
-            }
-        )?;
         match self.geometry() {
             Ok(geometry) => fmt_geometry(f, &geometry)?,
-            Err(error) => writeln!(f, "      <invalid geometry: {error}>")?,
+            Err(error) => writeln!(f, "    geometry: <invalid geometry: {error}>")?,
         }
-        writeln!(f, "    properties:")?;
-        for property in self.properties() {
-            match property {
-                Ok((key, value)) => match value.type_name() {
-                    Some(ty) => writeln!(f, "      {key} ({ty}) = {value:?}")?,
-                    None => writeln!(f, "      {key} = {value:?}")?,
-                },
-                Err(error) => writeln!(f, "      <invalid property: {error}>")?,
+        write!(f, "    properties:")?;
+        if self.has_properties() {
+            writeln!(f)?;
+            for property in self.properties() {
+                match property {
+                    Ok((key, value)) => writeln!(f, "      {key} = {value:?}")?,
+                    Err(error) => writeln!(f, "      <invalid property: {error}>")?,
+                }
             }
+        } else {
+            writeln!(f, " (none)")?;
         }
         Ok(())
     }
 }
 
+/// Renders the geometry after the `geometry:` label. A geometry that is a
+/// single element (one point, linestring, or polygon ring) is printed inline;
+/// anything with multiple elements is broken onto indented lines.
 fn fmt_geometry(f: &mut fmt::Formatter<'_>, geometry: &MvtGeometry) -> fmt::Result {
+    let mut lines = Vec::new();
     match geometry {
-        Geometry::Point(point) => fmt_point(f, *point),
-        Geometry::MultiPoint(points) => points.iter().try_for_each(|point| fmt_point(f, *point)),
-        Geometry::LineString(line) => fmt_line(f, line),
-        Geometry::MultiLineString(lines) => lines.iter().try_for_each(|line| fmt_line(f, line)),
-        Geometry::Polygon(polygon) => fmt_polygon(f, polygon),
-        Geometry::MultiPolygon(polygons) => polygons
+        Geometry::Point(point) => lines.push(point_line(*point)),
+        Geometry::MultiPoint(points) => lines.extend(points.iter().map(|p| point_line(*p))),
+        Geometry::LineString(line) => lines.push(line_line(line)),
+        Geometry::MultiLineString(strings) => lines.extend(strings.iter().map(line_line)),
+        Geometry::Polygon(polygon) => push_polygon(&mut lines, polygon),
+        Geometry::MultiPolygon(polygons) => {
+            polygons.iter().for_each(|p| push_polygon(&mut lines, p));
+        }
+        other => lines.push(format!("{other:?}")),
+    }
+
+    if let [single] = lines.as_slice() {
+        writeln!(f, "    geometry: {single}")
+    } else {
+        writeln!(f, "    geometry:")?;
+        lines
             .iter()
-            .try_for_each(|polygon| fmt_polygon(f, polygon)),
-        other => writeln!(f, "      {other:?}"),
+            .try_for_each(|line| writeln!(f, "      {line}"))
     }
 }
 
-fn fmt_point(f: &mut fmt::Formatter<'_>, point: Point<i32>) -> fmt::Result {
-    writeln!(f, "      POINT({},{})", point.x(), point.y())
+fn point_line(point: Point<i32>) -> String {
+    format!("POINT({},{})", point.x(), point.y())
 }
 
-fn fmt_line(f: &mut fmt::Formatter<'_>, line: &LineString<i32>) -> fmt::Result {
-    writeln!(
-        f,
-        "      LINESTRING[count={}]({})",
-        line.0.len(),
-        Coords(&line.0)
-    )
+fn line_line(line: &LineString<i32>) -> String {
+    format!("LINESTRING[count={}]({})", line.0.len(), Coords(&line.0))
 }
 
-fn fmt_polygon(f: &mut fmt::Formatter<'_>, polygon: &Polygon<i32>) -> fmt::Result {
-    fmt_ring(f, polygon.exterior(), "OUTER")?;
-    polygon
-        .interiors()
-        .iter()
-        .try_for_each(|ring| fmt_ring(f, ring, "INNER"))
+fn push_polygon(lines: &mut Vec<String>, polygon: &Polygon<i32>) {
+    lines.push(ring_line(polygon.exterior(), "OUTER"));
+    lines.extend(polygon.interiors().iter().map(|r| ring_line(r, "INNER")));
 }
 
-fn fmt_ring(f: &mut fmt::Formatter<'_>, ring: &LineString<i32>, winding: &str) -> fmt::Result {
-    writeln!(
-        f,
-        "      RING[count={}]({})[{winding}]",
+fn ring_line(ring: &LineString<i32>, winding: &str) -> String {
+    format!(
+        "RING[count={}]({})[{winding}]",
         ring.0.len(),
         Coords(&ring.0)
     )
@@ -222,12 +223,15 @@ mod tests {
         layer.features = vec![feature];
         let reader = reader_from_layer(layer);
         let feature = reader.layers().next().unwrap().features().next().unwrap();
+        assert!(!feature.has_properties());
         assert!(matches!(feature.geometry(), Err(MvtError::InvalidGeometry)));
     }
 }
 
 #[cfg(all(test, feature = "writer"))]
 mod writer_tests {
+    use geo_types::point;
+
     use crate::{MvtGeometry, MvtReaderRef, MvtTileBuilder};
 
     #[test]
@@ -235,7 +239,7 @@ mod writer_tests {
         let mut feature = MvtTileBuilder::new()
             .layer("places")
             .unwrap()
-            .feature(&MvtGeometry::Point((1, 2).into()))
+            .feature(&MvtGeometry::Point(point! { x: 1, y: 2 }))
             .unwrap();
         feature.id(Some(7));
         feature.tag_string("name", "Example").unwrap();
@@ -245,10 +249,10 @@ mod writer_tests {
         let feature = reader.layers().next().unwrap().features().next().unwrap();
 
         // A feature's `Debug` is its own impl, usable independently of the
-        // surrounding tile. Each line is newline-terminated.
+        // surrounding tile. A single-element geometry renders inline.
         assert_eq!(
             format!("{feature:?}"),
-            "    id: 7\n    geometry: point\n      POINT(1,2)\n    properties:\n      name = \"Example\"\n"
+            "    id: 7\n    geometry: POINT(1,2)\n    properties:\n      name = \"Example\"\n"
         );
     }
 }

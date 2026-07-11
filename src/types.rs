@@ -333,11 +333,13 @@ mod tests {
     use std::borrow::Cow;
     use std::hash::{Hash, Hasher};
 
+    use geo_types::point;
+
     use super::*;
 
     #[test]
     fn owned_tile_layer_and_feature_helpers_mutate_expected_fields() {
-        let mut feature = MvtFeature::new(MvtGeometry::Point((1, 2).into()));
+        let mut feature = MvtFeature::new(MvtGeometry::Point(point! { x: 1, y: 2 }));
         assert_eq!(feature.id, None);
         assert_eq!(feature.num_tags(), 0);
 
