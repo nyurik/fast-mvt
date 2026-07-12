@@ -40,7 +40,7 @@ impl MvtTileBuilder {
     }
 
     #[must_use]
-    pub fn finish(self) -> Vec<u8> {
+    pub fn encode(self) -> Vec<u8> {
         self.0.encode_to_vec()
     }
 
@@ -66,11 +66,11 @@ pub(crate) fn encode_tile(tile: MvtTile) -> MvtResult<Vec<u8>> {
             for (key, value) in feature.properties {
                 feature_bld.tag(key, value)?;
             }
-            layer_bld = feature_bld.finish();
+            layer_bld = feature_bld.end();
         }
-        tile_bld = layer_bld.finish();
+        tile_bld = layer_bld.end();
     }
-    Ok(tile_bld.finish())
+    Ok(tile_bld.encode())
 }
 
 pub(crate) fn encode_tile_ref(tile: &MvtTile) -> MvtResult<Vec<u8>> {
@@ -85,11 +85,11 @@ pub(crate) fn encode_tile_ref(tile: &MvtTile) -> MvtResult<Vec<u8>> {
             for (key, value) in &feature.properties {
                 feature_bld.tag(key, value.clone())?;
             }
-            layer_bld = feature_bld.finish();
+            layer_bld = feature_bld.end();
         }
-        tile_bld = layer_bld.finish();
+        tile_bld = layer_bld.end();
     }
-    Ok(tile_bld.finish())
+    Ok(tile_bld.encode())
 }
 
 #[derive(Debug)]
@@ -146,7 +146,7 @@ impl MvtLayerBuilder {
     }
 
     #[must_use]
-    pub fn finish(self) -> MvtTileBuilder {
+    pub fn end(self) -> MvtTileBuilder {
         let Self {
             tile,
             mut layer,
@@ -160,7 +160,7 @@ impl MvtLayerBuilder {
 }
 
 #[derive(Debug)]
-#[must_use = "finish the feature to commit it to the layer"]
+#[must_use = "call .end() to commit the feature to the layer"]
 pub struct MvtFeatureBuilder {
     layer: MvtLayerBuilder,
     feature: Feature,
@@ -225,7 +225,7 @@ impl MvtFeatureBuilder {
     }
 
     #[must_use]
-    pub fn finish(mut self) -> MvtLayerBuilder {
+    pub fn end(mut self) -> MvtLayerBuilder {
         self.layer.layer.features.push(self.feature);
         self.layer
     }
@@ -288,8 +288,8 @@ mod tests {
             .unwrap();
         feature.id(Some(1));
         feature.tag("skip", MvtValue::Null).unwrap();
-        let layer = feature.finish();
-        let bytes = layer.finish().finish();
+        let layer = feature.end();
+        let bytes = layer.end().encode();
         let proto = Tile::decode_from_slice(&bytes).unwrap();
         assert!(proto.layers[0].keys.is_empty());
         assert!(proto.layers[0].features[0].tags.is_empty());
@@ -300,16 +300,16 @@ mod tests {
             .feature(&MvtGeometry::Point(point! { x: 1, y: 2 }))
             .unwrap();
         feature.id(Some(1));
-        let layer = feature.finish();
-        let tile = layer.finish();
+        let layer = feature.end();
+        let tile = layer.end();
         let mut out = vec![0xaa];
-        out.extend_from_slice(&tile.finish());
+        out.extend_from_slice(&tile.encode());
         assert_eq!(out[0], 0xaa);
 
         let tile = MvtTileBuilder::new();
-        let tile = tile.layer("same").unwrap().finish();
-        let tile = tile.layer("same").unwrap().finish();
-        assert!(!tile.finish().is_empty());
+        let tile = tile.layer("same").unwrap().end();
+        let tile = tile.layer("same").unwrap().end();
+        assert!(!tile.encode().is_empty());
     }
 
     #[test]
@@ -344,16 +344,16 @@ mod tests {
     }
 
     #[test]
-    fn builder_encoded_len_matches_finished_bytes() {
+    fn builder_encoded_len_matches_encoded_bytes() {
         let builder = MvtTileBuilder::new()
             .layer("l")
             .unwrap()
             .feature(&MvtGeometry::Point(point! { x: 1, y: 2 }))
             .unwrap()
-            .finish()
-            .finish();
+            .end()
+            .end();
         let len = builder.encoded_len();
-        assert_eq!(len, builder.finish().len());
+        assert_eq!(len, builder.encode().len());
     }
 
     #[test]

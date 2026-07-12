@@ -29,7 +29,7 @@ fn try_re_encode(tile: &MvtTile) -> MvtResult<MvtTile> {
 
 #[test]
 fn empty_tile_round_trips() {
-    let bytes = MvtTileBuilder::new().finish();
+    let bytes = MvtTileBuilder::new().encode();
     let decoded = MvtReaderRef::new(&bytes).unwrap().to_tile().unwrap();
     assert!(decoded.layers.is_empty());
 }
@@ -50,22 +50,22 @@ fn owned_builder_api_encodes_like_mvt_crate_surface() {
     feature.tag_sint("s", -5).unwrap();
     feature.tag_bool("visible", true).unwrap();
     assert_eq!(feature.num_tags(), 7);
-    let layer = feature.finish();
+    let layer = feature.end();
     assert_eq!(layer.name(), "layer");
     assert_eq!(layer.num_features(), 1);
 
-    let tile = layer.finish();
-    let tile = tile.layer("layer").unwrap().finish();
-    assert!(!tile.finish().is_empty());
+    let tile = layer.end();
+    let tile = tile.layer("layer").unwrap().end();
+    assert!(!tile.encode().is_empty());
 
     let bytes = MvtTileBuilder::new()
         .layer("layer")
         .unwrap()
         .feature(&Geometry::Point(point! { x: 1, y: 2 }))
         .unwrap()
-        .finish()
-        .finish()
-        .finish();
+        .end()
+        .end()
+        .encode();
     assert!(!bytes.is_empty());
 }
 

@@ -37,7 +37,7 @@ fn tile_with_every_property_and_geometry_type() -> MvtResult<()> {
         7,
         "null tag must be dropped, not stored"
     );
-    let layer = feature.finish();
+    let layer = feature.end();
 
     // One feature per remaining geometry type; the linestring omits its id.
     let mut feature = layer.feature(&MvtGeometry::MultiPoint(MultiPoint(vec![
@@ -45,36 +45,36 @@ fn tile_with_every_property_and_geometry_type() -> MvtResult<()> {
         point! { x: 3, y: 4 },
     ])))?;
     feature.id(Some(2));
-    let layer = feature.finish();
+    let layer = feature.end();
 
     let layer = layer
         .feature(&MvtGeometry::LineString(
             line_string![(x: 0, y: 0), (x: 5, y: 5), (x: 10, y: 0)],
         ))?
-        .finish();
+        .end();
 
     let mut feature = layer.feature(&MvtGeometry::MultiLineString(MultiLineString(vec![
         line_string![(x: 0, y: 0), (x: 1, y: 1)],
         line_string![(x: 2, y: 2), (x: 3, y: 3)],
     ])))?;
     feature.id(Some(4));
-    let layer = feature.finish();
+    let layer = feature.end();
 
     let mut feature = layer.feature(&MvtGeometry::Polygon(polygon!(
         exterior: [(x: 0, y: 0), (x: 10, y: 0), (x: 10, y: 10), (x: 0, y: 10), (x: 0, y: 0)],
         interiors: [[(x: 3, y: 3), (x: 3, y: 6), (x: 6, y: 6), (x: 6, y: 3), (x: 3, y: 3)]],
     )))?;
     feature.id(Some(5));
-    let layer = feature.finish();
+    let layer = feature.end();
 
     let mut feature = layer.feature(&MvtGeometry::MultiPolygon(MultiPolygon(vec![
         polygon![(x: 0, y: 0), (x: 4, y: 0), (x: 4, y: 4), (x: 0, y: 4), (x: 0, y: 0)],
         polygon![(x: 6, y: 6), (x: 9, y: 6), (x: 9, y: 9), (x: 6, y: 9), (x: 6, y: 6)],
     ])))?;
     feature.id(Some(6));
-    let layer = feature.finish();
+    let layer = feature.end();
 
-    let bytes = layer.finish().finish();
+    let bytes = layer.end().encode();
 
     insta::assert_binary_snapshot!("tile.mvt", bytes.clone());
 
