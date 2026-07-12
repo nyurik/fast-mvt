@@ -10,7 +10,7 @@ use crate::{DEFAULT_EXTENT, MvtError, MvtLayer, MvtResult};
 pub struct MvtLayerRef<'a>(&'a proto_tile::LayerView<'a>);
 
 impl<'a> MvtLayerRef<'a> {
-    pub(super) fn new(view: &'a proto_tile::LayerView<'a>) -> Self {
+    pub(crate) fn new(view: &'a proto_tile::LayerView<'a>) -> Self {
         Self(view)
     }
 

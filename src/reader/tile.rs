@@ -18,28 +18,23 @@ impl Tile {
     }
 }
 
-fn validate_layers(tile: &TileView<'_>) -> MvtResult<()> {
-    for layer in &tile.layers {
-        if layer.name.is_empty() {
-            return Err(MvtError::MissingLayerName);
-        }
-        if layer.version < 1 || layer.version > 3 {
-            return Err(MvtError::UnsupportedVersion {
-                layer: layer.name.to_string(),
-                version: layer.version,
-            });
-        }
-    }
-    Ok(())
-}
-
 #[derive(Clone)]
 pub struct MvtReaderRef<'a>(TileView<'a>);
 
 impl<'a> MvtReaderRef<'a> {
     pub fn new(data: &'a [u8]) -> MvtResult<Self> {
         let tile = TileView::decode_view(data)?;
-        validate_layers(&tile)?;
+        for layer in &tile.layers {
+            if layer.name.is_empty() {
+                return Err(MvtError::MissingLayerName);
+            }
+            if layer.version < 1 || layer.version > 3 {
+                return Err(MvtError::UnsupportedVersion {
+                    layer: layer.name.to_string(),
+                    version: layer.version,
+                });
+            }
+        }
         Ok(Self(tile))
     }
 

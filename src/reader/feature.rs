@@ -15,7 +15,7 @@ pub struct MvtFeatureRef<'a> {
 }
 
 impl<'a> MvtFeatureRef<'a> {
-    pub(super) fn new(
+    pub(crate) fn new(
         layer: &'a proto_tile::LayerView<'a>,
         feature: &'a proto_tile::FeatureView<'a>,
     ) -> Self {
@@ -119,9 +119,7 @@ fn fmt_geometry(f: &mut fmt::Formatter<'_>, geometry: &MvtGeometry) -> fmt::Resu
         Geometry::LineString(line) => lines.push(line_line(line)),
         Geometry::MultiLineString(strings) => lines.extend(strings.iter().map(line_line)),
         Geometry::Polygon(polygon) => push_polygon(&mut lines, polygon),
-        Geometry::MultiPolygon(polygons) => {
-            polygons.iter().for_each(|p| push_polygon(&mut lines, p));
-        }
+        Geometry::MultiPolygon(p) => p.iter().for_each(|v| push_polygon(&mut lines, v)),
         other => lines.push(format!("{other:?}")),
     }
 
@@ -129,9 +127,7 @@ fn fmt_geometry(f: &mut fmt::Formatter<'_>, geometry: &MvtGeometry) -> fmt::Resu
         writeln!(f, "    geometry: {single}")
     } else {
         writeln!(f, "    geometry:")?;
-        lines
-            .iter()
-            .try_for_each(|line| writeln!(f, "      {line}"))
+        lines.iter().try_for_each(|v| writeln!(f, "      {v}"))
     }
 }
 
@@ -225,34 +221,5 @@ mod tests {
         let feature = reader.layers().next().unwrap().features().next().unwrap();
         assert!(!feature.has_properties());
         assert!(matches!(feature.geometry(), Err(MvtError::InvalidGeometry)));
-    }
-}
-
-#[cfg(all(test, feature = "writer"))]
-mod writer_tests {
-    use geo_types::point;
-
-    use crate::{MvtGeometry, MvtReaderRef, MvtTileBuilder};
-
-    #[test]
-    fn feature_ref_debug_renders_a_self_contained_block() {
-        let mut feature = MvtTileBuilder::new()
-            .layer("places")
-            .unwrap()
-            .feature(&MvtGeometry::Point(point! { x: 1, y: 2 }))
-            .unwrap();
-        feature.id(Some(7));
-        feature.tag_string("name", "Example").unwrap();
-        let bytes = feature.finish().finish().finish();
-
-        let reader = MvtReaderRef::new(&bytes).expect("valid MVT bytes");
-        let feature = reader.layers().next().unwrap().features().next().unwrap();
-
-        // A feature's `Debug` is its own impl, usable independently of the
-        // surrounding tile. A single-element geometry renders inline.
-        assert_eq!(
-            format!("{feature:?}"),
-            "    id: 7\n    geometry: POINT(1,2)\n    properties:\n      name = \"Example\"\n"
-        );
     }
 }

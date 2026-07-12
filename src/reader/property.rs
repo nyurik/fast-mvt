@@ -13,7 +13,7 @@ pub struct MvtPropertyIter<'a> {
 }
 
 impl<'a> MvtPropertyIter<'a> {
-    pub(super) fn new(
+    pub(crate) fn new(
         keys: &'a [&'a str],
         values: &'a [proto_tile::ValueView<'a>],
         tags: std::slice::Chunks<'a, u32>,
@@ -86,7 +86,7 @@ impl fmt::Debug for MvtValueRef<'_> {
     }
 }
 
-pub(super) fn value_ref<'a>(value: &'a proto_tile::ValueView<'a>) -> MvtValueRef<'a> {
+pub(crate) fn value_ref<'a>(value: &'a proto_tile::ValueView<'a>) -> MvtValueRef<'a> {
     if let Some(value) = value.string_value {
         MvtValueRef::String(value)
     } else if let Some(value) = value.float_value {
