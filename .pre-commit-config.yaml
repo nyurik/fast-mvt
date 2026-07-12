@@ -41,8 +41,7 @@ repos:
         language: rust
         pass_filenames: false
 
-# Disabled because inline insta string blocks are triggered. TODO.
-#  - repo: https://github.com/editorconfig-checker/editorconfig-checker.python
-#    rev: 3.6.1
-#    hooks:
-#      - id: editorconfig-checker
+  - repo: https://github.com/editorconfig-checker/editorconfig-checker.python
+    rev: 3.6.1
+    hooks:
+      - id: editorconfig-checker
