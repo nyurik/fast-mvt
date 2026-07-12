@@ -87,7 +87,7 @@ mod tests {
     use crate::MvtValue;
     use crate::generated::vector_tile::tile as proto_tile;
     use crate::reader::MvtValueRef;
-    use crate::reader::tests::{first_feature, reader_from_layer};
+    use crate::reader::tests::{encode_layer, first_feature};
 
     #[test]
     fn borrowed_api_reads_accessors_properties_and_repeated_points() {
@@ -143,7 +143,8 @@ mod tests {
             }],
             ..Default::default()
         };
-        let reader = reader_from_layer(layer);
+        let bytes = encode_layer(layer);
+        let reader = MvtReaderRef::new(&bytes).unwrap();
         let layer = reader.layers().next().unwrap();
 
         assert_eq!(reader.layer_count(), 1);
@@ -198,17 +199,12 @@ mod tests {
 
     #[test]
     fn invalid_versions_and_geometry_types_are_errors() {
-        use buffa::Message as _;
-
         let layer = proto_tile::Layer {
             version: 4,
             name: "bad".into(),
             ..Default::default()
         };
-        let bytes = Tile {
-            layers: vec![layer.clone()],
-        }
-        .encode_to_vec();
+        let bytes = encode_layer(layer);
         assert!(matches!(
             MvtReaderRef::new(&bytes),
             Err(MvtError::UnsupportedVersion { version: 4, .. })
@@ -225,7 +221,9 @@ mod tests {
             ..Default::default()
         };
         layer.features = vec![feature];
-        let feature = first_feature(layer);
+        let bytes = encode_layer(layer);
+        let reader = MvtReaderRef::new(&bytes).unwrap();
+        let feature = first_feature(&reader);
         assert!(matches!(feature.geometry(), Err(MvtError::InvalidGeometry)));
     }
 }

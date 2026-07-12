@@ -71,7 +71,9 @@ unused_qualifications = "warn"
 
 [lints.clippy]
 # Restrictions
-#disallowed_methods = "forbid"
+# `deny`, not `forbid`: clap's derive macros emit `#[allow(clippy::style)]`, and
+# `disallowed_methods` is a `style` lint, so `forbid` would break compilation
+disallowed_methods = "deny"
 panic_in_result_fn = "warn"
 todo = "warn"
 unwrap_used = "warn"

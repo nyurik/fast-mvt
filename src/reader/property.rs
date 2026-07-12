@@ -109,7 +109,8 @@ pub(crate) fn value_ref<'a>(value: &'a proto_tile::ValueView<'a>) -> MvtValueRef
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::reader::tests::first_feature;
+    use crate::MvtReaderRef;
+    use crate::reader::tests::{encode_layer, first_feature};
 
     #[test]
     fn value_ref_debug_renders_bare_values() {
@@ -144,7 +145,9 @@ mod tests {
             };
             let mut layer = layer.clone();
             layer.features = vec![feature];
-            let err = first_feature(layer)
+            let bytes = encode_layer(layer);
+            let reader = MvtReaderRef::new(&bytes).unwrap();
+            let err = first_feature(&reader)
                 .properties()
                 .next()
                 .unwrap()

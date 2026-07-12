@@ -172,8 +172,8 @@ mod tests {
     use geo_types::{Geometry, MultiLineString, MultiPoint, MultiPolygon};
 
     use super::*;
-    use crate::MvtError;
-    use crate::reader::tests::first_feature;
+    use crate::reader::tests::{encode_layer, first_feature};
+    use crate::{MvtError, MvtReaderRef};
 
     #[test]
     fn empty_geometries_keep_declared_type() {
@@ -205,7 +205,9 @@ mod tests {
             };
             let mut layer = layer.clone();
             layer.features = vec![feature];
-            let feature = first_feature(layer);
+            let bytes = encode_layer(layer);
+            let reader = MvtReaderRef::new(&bytes).unwrap();
+            let feature = first_feature(&reader);
             assert_eq!(feature.geometry().unwrap(), expected);
         }
 
@@ -216,7 +218,9 @@ mod tests {
         };
         let mut layer = layer.clone();
         layer.features = vec![feature];
-        let feature = first_feature(layer);
+        let bytes = encode_layer(layer);
+        let reader = MvtReaderRef::new(&bytes).unwrap();
+        let feature = first_feature(&reader);
         assert!(!feature.has_properties());
         assert!(matches!(feature.geometry(), Err(MvtError::InvalidGeometry)));
     }

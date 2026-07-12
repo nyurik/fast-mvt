@@ -15,23 +15,17 @@ mod tests {
     use super::{MvtFeatureRef, MvtReaderRef};
     use crate::generated::vector_tile::{Tile, tile as proto_tile};
 
-    /// Encodes a single-layer tile and returns a reader over leaked bytes, so
-    /// tests can borrow it for `'static`.
-    #[allow(clippy::disallowed_methods)]
-    pub fn reader_from_layer(layer: proto_tile::Layer) -> MvtReaderRef<'static> {
-        let bytes = Tile {
+    /// Encodes a single-layer tile. Tests keep the returned bytes alive and
+    /// borrow a [`MvtReaderRef`] from them, so nothing needs to be leaked.
+    pub fn encode_layer(layer: proto_tile::Layer) -> Vec<u8> {
+        Tile {
             layers: vec![layer],
         }
-        .encode_to_vec();
-        let bytes = Box::leak(bytes.into_boxed_slice());
-        MvtReaderRef::new(bytes).unwrap()
+        .encode_to_vec()
     }
 
-    /// Returns the first feature of the first layer, for tests that only care
-    /// about a single feature. The reader is leaked so the feature is `'static`.
-    #[allow(clippy::disallowed_methods)]
-    pub fn first_feature(layer: proto_tile::Layer) -> MvtFeatureRef<'static> {
-        let reader: &'static MvtReaderRef<'static> = Box::leak(Box::new(reader_from_layer(layer)));
+    /// The first feature of the first layer, for tests that only need one.
+    pub fn first_feature<'r>(reader: &'r MvtReaderRef<'_>) -> MvtFeatureRef<'r> {
         reader.layers().next().unwrap().features().next().unwrap()
     }
 }
