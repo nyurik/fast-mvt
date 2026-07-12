@@ -6,7 +6,7 @@ use std::path::Path;
 use fast_mvt::{
     DEFAULT_EXTENT, MvtFeature, MvtLayer, MvtReaderRef, MvtResult, MvtTile, MvtTileBuilder,
 };
-use geo_types::{Geometry, LineString, Polygon};
+use geo_types::{Geometry, point, polygon};
 use test_each_file::test_each_path;
 
 test_each_path! { for ["mvt"] in "fixtures/mvt-fixtures/real-world" as real_world_fixtures => round_trip_file }
@@ -29,7 +29,7 @@ fn try_re_encode(tile: &MvtTile) -> MvtResult<MvtTile> {
 
 #[test]
 fn empty_tile_round_trips() {
-    let bytes = MvtTileBuilder::new().finish();
+    let bytes = MvtTileBuilder::new().encode();
     let decoded = MvtReaderRef::new(&bytes).unwrap().to_tile().unwrap();
     assert!(decoded.layers.is_empty());
 }
@@ -38,7 +38,9 @@ fn empty_tile_round_trips() {
 fn owned_builder_api_encodes_like_mvt_crate_surface() {
     let tile = MvtTileBuilder::new();
     let layer = tile.layer("layer").unwrap();
-    let mut feature = layer.feature(&Geometry::Point((1, 2).into())).unwrap();
+    let mut feature = layer
+        .feature(&Geometry::Point(point! { x: 1, y: 2 }))
+        .unwrap();
     feature.id(Some(7));
     feature.tag_string("name", "place").unwrap();
     feature.tag_double("score", 1.5).unwrap();
@@ -48,22 +50,22 @@ fn owned_builder_api_encodes_like_mvt_crate_surface() {
     feature.tag_sint("s", -5).unwrap();
     feature.tag_bool("visible", true).unwrap();
     assert_eq!(feature.num_tags(), 7);
-    let layer = feature.finish();
+    let layer = feature.end();
     assert_eq!(layer.name(), "layer");
     assert_eq!(layer.num_features(), 1);
 
-    let tile = layer.finish();
-    let tile = tile.layer("layer").unwrap().finish();
-    assert!(!tile.finish().is_empty());
+    let tile = layer.end();
+    let tile = tile.layer("layer").unwrap().end();
+    assert!(!tile.encode().is_empty());
 
     let bytes = MvtTileBuilder::new()
         .layer("layer")
         .unwrap()
-        .feature(&Geometry::Point((1, 2).into()))
+        .feature(&Geometry::Point(point! { x: 1, y: 2 }))
         .unwrap()
-        .finish()
-        .finish()
-        .finish();
+        .end()
+        .end()
+        .encode();
     assert!(!bytes.is_empty());
 }
 
@@ -95,16 +97,13 @@ fn ring_is_implicitly_closed() {
             extent: DEFAULT_EXTENT,
             features: vec![MvtFeature {
                 id: Some(1),
-                geometry: Geometry::Polygon(Polygon::new(
-                    LineString(vec![
-                        (0, 0).into(),
-                        (10, 0).into(),
-                        (10, 10).into(),
-                        (0, 10).into(),
-                        (0, 0).into(),
-                    ]),
-                    vec![],
-                )),
+                geometry: Geometry::Polygon(polygon![
+                    (x: 0, y: 0),
+                    (x: 10, y: 0),
+                    (x: 10, y: 10),
+                    (x: 0, y: 10),
+                    (x: 0, y: 0),
+                ]),
                 properties: Vec::new(),
             }],
         }],

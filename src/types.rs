@@ -333,11 +333,13 @@ mod tests {
     use std::borrow::Cow;
     use std::hash::{Hash, Hasher};
 
+    use geo_types::point;
+
     use super::*;
 
     #[test]
     fn owned_tile_layer_and_feature_helpers_mutate_expected_fields() {
-        let mut feature = MvtFeature::new(MvtGeometry::Point((1, 2).into()));
+        let mut feature = MvtFeature::new(MvtGeometry::Point(point! { x: 1, y: 2 }));
         assert_eq!(feature.id, None);
         assert_eq!(feature.num_tags(), 0);
 
@@ -394,37 +396,21 @@ mod tests {
 
     #[test]
     fn mvt_value_equality_and_hash_include_variant_and_float_bits() {
-        #[derive(Default)]
-        struct RecordingHasher(Vec<u8>);
-
-        impl Hasher for RecordingHasher {
-            fn finish(&self) -> u64 {
-                0
-            }
-
-            fn write(&mut self, bytes: &[u8]) {
-                self.0.extend_from_slice(bytes);
-            }
-        }
-
-        fn hash_bytes(value: &MvtValue) -> Vec<u8> {
-            let mut hasher = RecordingHasher::default();
+        fn hash(value: &MvtValue) -> u64 {
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
             value.hash(&mut hasher);
-            hasher.0
+            hasher.finish()
         }
 
         assert_eq!(MvtValue::Float(f32::NAN), MvtValue::Float(f32::NAN));
         assert_ne!(MvtValue::Int(1), MvtValue::SInt(1));
         assert_ne!(MvtValue::Int(1), MvtValue::UInt(1));
         assert_eq!(
-            hash_bytes(&MvtValue::Double(f64::NAN)),
-            hash_bytes(&MvtValue::Double(f64::NAN))
+            hash(&MvtValue::Double(f64::NAN)),
+            hash(&MvtValue::Double(f64::NAN))
         );
-        assert_ne!(
-            hash_bytes(&MvtValue::Int(1)),
-            hash_bytes(&MvtValue::SInt(1))
-        );
-        assert_eq!(hash_bytes(&MvtValue::Null), hash_bytes(&MvtValue::Null));
+        assert_ne!(hash(&MvtValue::Int(1)), hash(&MvtValue::SInt(1)));
+        assert_eq!(hash(&MvtValue::Null), hash(&MvtValue::Null));
     }
 }
 

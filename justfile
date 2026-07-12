@@ -18,6 +18,10 @@ export RUST_BACKTRACE := env('RUST_BACKTRACE', if ci_mode == '1' {'1'} else {'0'
 @_default:
     {{just}} --list
 
+# Run integration tests and save its output as the new expected output
+bless *args:  (cargo-install 'cargo-insta')
+    cargo insta test --accept --unreferenced=delete --all-features {{args}}
+
 # Build the project
 build:
     cargo build --workspace --all-features --all-targets
@@ -86,7 +90,7 @@ coverage:  (_coverage '--open')
 _coverage *report_args:  (cargo-install 'cargo-llvm-cov')
     cargo llvm-cov clean --workspace
     cargo llvm-cov --no-report --workspace --all-features --all-targets
-    cargo llvm-cov report --include-build-script {{report_args}}
+    cargo llvm-cov report --include-build-script --ignore-filename-regex 'src/generated/' {{report_args}}
 
 # Build and open code documentation
 docs *args='--open':

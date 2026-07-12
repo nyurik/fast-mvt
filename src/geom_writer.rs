@@ -185,36 +185,30 @@ fn u32_index(value: usize) -> MvtResult<u32> {
 #[cfg(test)]
 mod tests {
     use geo_types::{
-        GeometryCollection, Line, LineString, MultiLineString, MultiPoint, MultiPolygon, Rect,
-        Triangle,
+        GeometryCollection, Line, MultiLineString, MultiPoint, MultiPolygon, Rect, Triangle, coord,
+        line_string, point, polygon,
     };
 
     use super::*;
 
     #[test]
     fn encodes_spec_point() {
-        let geometry = MvtGeometry::Point((25, 17).into());
+        let geometry = MvtGeometry::Point(point! { x: 25, y: 17 });
         let (_, data) = encode_geometry(&geometry).unwrap();
         assert_eq!(data, vec![9, 50, 34]);
     }
 
     #[test]
     fn encodes_spec_linestring() {
-        let geometry = MvtGeometry::LineString(LineString(vec![
-            (2, 2).into(),
-            (2, 10).into(),
-            (10, 10).into(),
-        ]));
+        let geometry =
+            MvtGeometry::LineString(line_string![(x: 2, y: 2), (x: 2, y: 10), (x: 10, y: 10)]);
         let (_, data) = encode_geometry(&geometry).unwrap();
         assert_eq!(data, vec![9, 4, 4, 18, 0, 16, 16, 0]);
     }
 
     #[test]
     fn encodes_spec_polygon() {
-        let geometry = MvtGeometry::Polygon(MvtPolygon::new(
-            LineString(vec![(3, 6).into(), (8, 12).into(), (20, 34).into()]),
-            vec![],
-        ));
+        let geometry = MvtGeometry::Polygon(polygon![(x: 3, y: 6), (x: 8, y: 12), (x: 20, y: 34)]);
         let (_, data) = encode_geometry(&geometry).unwrap();
         assert_eq!(data, vec![9, 6, 12, 18, 10, 12, 24, 44, 15]);
     }
@@ -235,17 +229,17 @@ mod tests {
         );
         let collection =
             MvtGeometry::GeometryCollection(GeometryCollection(vec![MvtGeometry::Point(
-                (1, 2).into(),
+                point! { x: 1, y: 2 },
             )]));
-        let direct = encode_geometry(&MvtGeometry::Point((1, 2).into())).unwrap();
+        let direct = encode_geometry(&MvtGeometry::Point(point! { x: 1, y: 2 })).unwrap();
         assert_eq!(encode_geometry(&collection).unwrap(), direct);
     }
 
     #[test]
     fn unsupported_and_invalid_geometries_are_errors() {
         let collection = MvtGeometry::GeometryCollection(GeometryCollection(vec![
-            MvtGeometry::Point((0, 0).into()),
-            MvtGeometry::Point((1, 1).into()),
+            MvtGeometry::Point(point! { x: 0, y: 0 }),
+            MvtGeometry::Point(point! { x: 1, y: 1 }),
         ]));
         assert!(matches!(
             encode_geometry(&collection),
@@ -261,27 +255,43 @@ mod tests {
         ));
         assert!(matches!(
             encode_geometry(&MvtGeometry::Triangle(Triangle(
-                (0, 0).into(),
-                (1, 0).into(),
-                (0, 1).into()
+                coord! { x: 0, y: 0 },
+                coord! { x: 1, y: 0 },
+                coord! { x: 0, y: 1 },
             ))),
             Err(MvtError::UnsupportedGeometry("Triangle"))
         ));
         assert!(matches!(
-            encode_geometry(&MvtGeometry::MultiPoint(MultiPoint(vec![(1, 1).into()]))),
+            encode_geometry(&MvtGeometry::MultiPoint(MultiPoint(vec![
+                point! { x: 1, y: 1 }
+            ]))),
             Ok((GeomType::Point, _))
         ));
         assert!(matches!(
-            encode_geometry(&MvtGeometry::LineString(LineString(vec![]))),
+            encode_geometry(&MvtGeometry::LineString(line_string![])),
             Err(MvtError::InvalidGeometry)
         ));
         assert!(matches!(
-            encode_geometry(&MvtGeometry::Polygon(MvtPolygon::new(
-                LineString(vec![]),
-                vec![]
-            ))),
+            encode_geometry(&MvtGeometry::Polygon(polygon![])),
             Err(MvtError::InvalidGeometry)
         ));
         assert_eq!(signed_area(&[]), 0);
+    }
+
+    #[test]
+    fn encoder_edge_cases() {
+        // No coordinates fed to `points` is an error.
+        assert!(matches!(
+            GeometryEncoder::with_capacity(0).points(std::iter::empty::<MvtCoord>()),
+            Err(MvtError::InvalidGeometry)
+        ));
+        // Single-vertex line and ring skip the `LineTo` branch.
+        encode_geometry(&MvtGeometry::LineString(line_string![(x: 1, y: 2)])).unwrap();
+        encode_geometry(&MvtGeometry::Polygon(polygon![(x: 1, y: 2)])).unwrap();
+        // A reversed exterior ring is rewound (exercises the `reverse` path).
+        encode_geometry(&MvtGeometry::Polygon(
+            polygon![(x: 20, y: 34), (x: 8, y: 12), (x: 3, y: 6)],
+        ))
+        .unwrap();
     }
 }
