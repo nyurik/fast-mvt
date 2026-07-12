@@ -12,7 +12,7 @@ pub use tile::MvtReaderRef;
 mod tests {
     use buffa::Message as _;
 
-    use super::MvtReaderRef;
+    use super::{MvtFeatureRef, MvtReaderRef};
     use crate::generated::vector_tile::{Tile, tile as proto_tile};
 
     /// Encodes a single-layer tile and returns a reader over leaked bytes, so
@@ -25,5 +25,13 @@ mod tests {
         .encode_to_vec();
         let bytes = Box::leak(bytes.into_boxed_slice());
         MvtReaderRef::new(bytes).unwrap()
+    }
+
+    /// Returns the first feature of the first layer, for tests that only care
+    /// about a single feature. The reader is leaked so the feature is `'static`.
+    #[allow(clippy::disallowed_methods)]
+    pub fn first_feature(layer: proto_tile::Layer) -> MvtFeatureRef<'static> {
+        let reader: &'static MvtReaderRef<'static> = Box::leak(Box::new(reader_from_layer(layer)));
+        reader.layers().next().unwrap().features().next().unwrap()
     }
 }

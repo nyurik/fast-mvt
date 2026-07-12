@@ -173,7 +173,7 @@ mod tests {
 
     use super::*;
     use crate::MvtError;
-    use crate::reader::tests::reader_from_layer;
+    use crate::reader::tests::first_feature;
 
     #[test]
     fn empty_geometries_keep_declared_type() {
@@ -205,8 +205,7 @@ mod tests {
             };
             let mut layer = layer.clone();
             layer.features = vec![feature];
-            let reader = reader_from_layer(layer);
-            let feature = reader.layers().next().unwrap().features().next().unwrap();
+            let feature = first_feature(layer);
             assert_eq!(feature.geometry().unwrap(), expected);
         }
 
@@ -217,8 +216,7 @@ mod tests {
         };
         let mut layer = layer.clone();
         layer.features = vec![feature];
-        let reader = reader_from_layer(layer);
-        let feature = reader.layers().next().unwrap().features().next().unwrap();
+        let feature = first_feature(layer);
         assert!(!feature.has_properties());
         assert!(matches!(feature.geometry(), Err(MvtError::InvalidGeometry)));
     }
