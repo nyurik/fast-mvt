@@ -125,6 +125,21 @@ mod tests {
     }
 
     #[test]
+    fn value_ref_into_owned_covers_every_variant() {
+        assert_eq!(
+            MvtValueRef::String("x").into_owned(),
+            MvtValue::String("x".into())
+        );
+        assert_eq!(MvtValueRef::Float(1.25).into_owned(), MvtValue::Float(1.25));
+        assert_eq!(MvtValueRef::Double(2.5).into_owned(), MvtValue::Double(2.5));
+        assert_eq!(MvtValueRef::Int(-3).into_owned(), MvtValue::Int(-3));
+        assert_eq!(MvtValueRef::UInt(4).into_owned(), MvtValue::UInt(4));
+        assert_eq!(MvtValueRef::SInt(-5).into_owned(), MvtValue::SInt(-5));
+        assert_eq!(MvtValueRef::Bool(true).into_owned(), MvtValue::Bool(true));
+        assert_eq!(MvtValueRef::Null.into_owned(), MvtValue::Null);
+    }
+
+    #[test]
     fn property_iterator_reports_malformed_tags() {
         let layer = proto_tile::Layer {
             version: 2,

@@ -224,4 +224,32 @@ mod tests {
         assert!(!feature.has_properties());
         assert!(matches!(feature.geometry(), Err(MvtError::InvalidGeometry)));
     }
+
+    #[test]
+    fn debug_renders_invalid_geometry_and_property_markers() {
+        let layer = proto_tile::Layer {
+            version: 2,
+            name: "x".into(),
+            features: vec![proto_tile::Feature {
+                r#type: Some(proto_tile::GeomType::Unknown),
+                geometry: vec![9, 0, 0],
+                tags: vec![0],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let bytes = encode_layer(layer);
+        let reader = MvtReaderRef::new(&bytes).unwrap();
+        insta::assert_debug_snapshot!(reader, @"
+        layer: 0
+          name: x
+          version: 2
+          extent: 4096
+          feature: 0
+            id: (none)
+            geometry: <invalid geometry: invalid geometry command stream>
+            properties:
+              <invalid property: invalid feature tags length: 1>
+        ");
+    }
 }

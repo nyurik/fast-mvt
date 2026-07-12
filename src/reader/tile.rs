@@ -226,4 +226,31 @@ mod tests {
         let feature = first_feature(&reader);
         assert!(matches!(feature.geometry(), Err(MvtError::InvalidGeometry)));
     }
+
+    #[test]
+    fn debug_separates_multiple_layers() {
+        use buffa::Message as _;
+
+        let layer = |name: &str| proto_tile::Layer {
+            version: 2,
+            name: name.into(),
+            ..Default::default()
+        };
+        let bytes = Tile {
+            layers: vec![layer("a"), layer("b")],
+        }
+        .encode_to_vec();
+        let reader = MvtReaderRef::new(&bytes).unwrap();
+        insta::assert_debug_snapshot!(reader, @"
+        layer: 0
+          name: a
+          version: 2
+          extent: 4096
+        =============================================================
+        layer: 1
+          name: b
+          version: 2
+          extent: 4096
+        ");
+    }
 }

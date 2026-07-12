@@ -277,4 +277,21 @@ mod tests {
         ));
         assert_eq!(signed_area(&[]), 0);
     }
+
+    #[test]
+    fn encoder_edge_cases() {
+        // No coordinates fed to `points` is an error.
+        assert!(matches!(
+            GeometryEncoder::with_capacity(0).points(std::iter::empty::<MvtCoord>()),
+            Err(MvtError::InvalidGeometry)
+        ));
+        // Single-vertex line and ring skip the `LineTo` branch.
+        encode_geometry(&MvtGeometry::LineString(line_string![(x: 1, y: 2)])).unwrap();
+        encode_geometry(&MvtGeometry::Polygon(polygon![(x: 1, y: 2)])).unwrap();
+        // A reversed exterior ring is rewound (exercises the `reverse` path).
+        encode_geometry(&MvtGeometry::Polygon(
+            polygon![(x: 20, y: 34), (x: 8, y: 12), (x: 3, y: 6)],
+        ))
+        .unwrap();
+    }
 }

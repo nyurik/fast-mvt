@@ -344,6 +344,19 @@ mod tests {
     }
 
     #[test]
+    fn builder_encoded_len_matches_finished_bytes() {
+        let builder = MvtTileBuilder::new()
+            .layer("l")
+            .unwrap()
+            .feature(&MvtGeometry::Point(point! { x: 1, y: 2 }))
+            .unwrap()
+            .finish()
+            .finish();
+        let len = builder.encoded_len();
+        assert_eq!(len, builder.finish().len());
+    }
+
+    #[test]
     fn layer_builder_accepts_feature_capacity() {
         let layer = MvtTileBuilder::new()
             .layer_with_capacity("layer", 2)
