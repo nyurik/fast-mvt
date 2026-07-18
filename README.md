@@ -86,11 +86,12 @@ multiple independently built layer buffers can be concatenated to form a tile.
 
 Run with `just bench-decode`:
 
-| Decoder      |    Time |   Throughput |     Compare |
-|--------------|--------:|-------------:|------------:|
-| `fast-mvt`   |  108 ms |  142.9 MiB/s |           - |
-| `tinymvt`    |  196 ms |   78.5 MiB/s | 1.8x slower |
-| `mvt-reader` |  622 ms |   24.8 MiB/s | 5.8x slower |
+| Decoder                    | Time     | Throughput  | Compare     |
+|----------------------------|----------|-------------|-------------|
+| `fast-mvt`                 | 97.6 ms  | 157.9 MiB/s | -           |
+| `tinymvt 0.3.0`            | 192.3 ms | 80.2 MiB/s  | 2.0x slower |
+| `mvt-reader 2.3.0`         | 597.0 ms | 25.8 MiB/s  | 6.1x slower |
+| `mvt` decode not supported | n/a      | n/a         | n/a         |
 
 #### Encoding
 
@@ -98,21 +99,21 @@ Run with `just bench-encode`:
 
 Encoding from an already parsed integer tile model:
 
-| Encoder    |     Time | Throughput |      Compare |
-|------------|---------:|-----------:|-------------:|
-| `fast-mvt` |  13.4 ms | 63.8 MiB/s |            - |
-| `tinymvt`  |  14.8 ms | 58.0 MiB/s |  1.1x slower |
-| `mvt`      |  25.2 ms | 34.1 MiB/s | 1.9x slower* |
+| Encoder                           | Time    | Throughput | Compare     |
+|-----------------------------------|---------|------------|-------------|
+| `fast-mvt`                        | 12.9 ms | 66.5 MiB/s | -           |
+| `tinymvt 0.3.0`                   | 14.1 ms | 60.9 MiB/s | 1.1x slower |
+| `mvt 0.14.0`                      | 23.4 ms | 36.7 MiB/s | 1.8x slower |
+| `mvt-reader` encode not supported | n/a     | n/a        | n/a         |
 
 Encoding from an owned tile value. Note that "owned" benchmark includes deep-cloning of each tile, so it makes no sense to compare throughput between the owned vs referenced table above, only between different encoders. Owned path is usually better.
 
-| Encoder    |     Time | Throughput |      Compare |
-|------------|---------:|-----------:|-------------:|
-| `fast-mvt` |  19.3 ms | 44.3 MiB/s |            - |
-| `tinymvt`  |  24.4 ms | 35.2 MiB/s |  1.3x slower |
-| `mvt`      |  34.3 ms | 25.0 MiB/s | 1.8x slower* |
-
-\* The `mvt` encoder is broken for large real-world tiles, resulting in 100x slower performance.
+| Encoder                           | Time    | Throughput | Compare     |
+|-----------------------------------|---------|------------|-------------|
+| `fast-mvt`                        | 18.6 ms | 46.0 MiB/s | -           |
+| `tinymvt 0.3.0`                   | 23.1 ms | 37.1 MiB/s | 1.2x slower |
+| `mvt 0.14.0`                      | 32.9 ms | 26.1 MiB/s | 1.8x slower |
+| `mvt-reader` encode not supported | n/a     | n/a        | n/a         |
 
 ## Features
 
