@@ -101,6 +101,25 @@ pub struct MvtLayerBuilder {
 }
 
 impl MvtLayerBuilder {
+    /// Create a standalone layer builder that is not attached to a tile.
+    ///
+    /// This is also a convenient entry point for building a layer directly: add
+    /// features and tags as usual, then either [`end`](Self::end) it into a tile
+    /// or [`encode`](Self::encode) it on its own.
+    ///
+    /// Finishing with [`encode`](Self::encode) yields a framed layer chunk.
+    /// Independently built layer buffers (for example, one per thread) can be
+    /// concatenated to form a complete tile — see the crate-level parallel
+    /// encoding example. Returns [`MvtError::MissingLayerName`] if `name` is empty.
+    pub fn new(name: impl Into<String>) -> MvtResult<Self> {
+        MvtTileBuilder::new().layer(name)
+    }
+
+    /// Like [`MvtLayerBuilder::new`], but preallocates space for `features`.
+    pub fn with_capacity(name: impl Into<String>, features: usize) -> MvtResult<Self> {
+        MvtTileBuilder::new().layer_with_capacity(name, features)
+    }
+
     fn with_tile(tile: MvtTileBuilder, name: String, features: usize) -> Self {
         Self {
             tile,
@@ -156,6 +175,19 @@ impl MvtLayerBuilder {
         layer.keys = keys.into_vec();
         layer.values = values.into_iter().map(value_to_proto).collect();
         tile.push_layer(layer)
+    }
+
+    /// Commit this layer and encode the tile built so far.
+    ///
+    /// For a builder created with [`MvtLayerBuilder::new`], the parent tile is
+    /// empty, so this encodes exactly this one layer as a framed chunk — several
+    /// such buffers can be concatenated (for example with `[Vec<u8>]::concat()`)
+    /// into a multi-layer tile. For a builder obtained from
+    /// [`MvtTileBuilder::layer`], the result also includes any previously
+    /// committed layers, making it equivalent to `self.end().encode()`.
+    #[must_use]
+    pub fn encode(self) -> Vec<u8> {
+        self.end().encode()
     }
 }
 
@@ -340,6 +372,49 @@ mod tests {
             encode_tile(tile.clone()).unwrap(),
             encode_tile_ref(&tile).unwrap()
         );
+    }
+
+    #[test]
+    fn standalone_layer_encode_matches_tile_path_and_concatenates() {
+        use crate::reader::MvtReaderRef;
+
+        let build = |name| {
+            let mut feature = MvtLayerBuilder::new(name)
+                .unwrap()
+                .feature(&MvtGeometry::Point(point! { x: 1, y: 2 }))
+                .unwrap();
+            feature.tag("k", MvtValue::UInt(1)).unwrap();
+            feature.end().encode()
+        };
+
+        // A standalone layer buffer equals the same layer built via the tile path.
+        let via_tile = MvtTileBuilder::new()
+            .layer("roads")
+            .unwrap()
+            .feature(&MvtGeometry::Point(point! { x: 1, y: 2 }))
+            .unwrap();
+        let mut via_tile = via_tile;
+        via_tile.tag("k", MvtValue::UInt(1)).unwrap();
+        let via_tile = via_tile.end().end().encode();
+        assert_eq!(build("roads"), via_tile);
+
+        // Concatenated layer buffers form a valid multi-layer tile.
+        let tile = [build("roads"), build("water")].concat();
+        let reader = MvtReaderRef::new(&tile).unwrap();
+        let names: Vec<_> = reader.layers().map(|l| l.name().to_string()).collect();
+        assert_eq!(names, ["roads", "water"]);
+    }
+
+    #[test]
+    fn standalone_layer_builder_rejects_empty_name() {
+        assert!(matches!(
+            MvtLayerBuilder::new(""),
+            Err(MvtError::MissingLayerName)
+        ));
+        assert!(matches!(
+            MvtLayerBuilder::with_capacity("", 1),
+            Err(MvtError::MissingLayerName)
+        ));
     }
 
     #[test]
