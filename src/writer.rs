@@ -375,6 +375,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "reader")]
     fn standalone_layer_encode_matches_tile_path_and_concatenates() {
         use crate::reader::MvtReaderRef;
 
