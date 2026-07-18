@@ -377,6 +377,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "reader")]
     fn tag_auto_int_round_trips_through_reader() {
         use crate::reader::{MvtReaderRef, MvtValueRef};
 
