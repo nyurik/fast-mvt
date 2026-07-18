@@ -215,6 +215,17 @@ impl MvtFeatureBuilder {
         self.tag(key, MvtValue::SInt(value))
     }
 
+    /// Add an integer tag using the smallest MVT encoding for `value`.
+    ///
+    /// See [`MvtValue::auto_int`] for how the encoding is chosen.
+    pub fn tag_auto_int(
+        &mut self,
+        key: impl AsRef<str>,
+        value: impl Into<i64>,
+    ) -> MvtResult<&mut Self> {
+        self.tag(key, MvtValue::auto_int(value))
+    }
+
     pub fn tag_bool(&mut self, key: impl AsRef<str>, value: bool) -> MvtResult<&mut Self> {
         self.tag(key, MvtValue::Bool(value))
     }
@@ -363,6 +374,58 @@ mod tests {
             .unwrap();
 
         assert_eq!(layer.layer.features.capacity(), 2);
+    }
+
+    #[test]
+    #[cfg(feature = "reader")]
+    fn tag_auto_int_round_trips_through_reader() {
+        use crate::reader::{MvtReaderRef, MvtValueRef};
+
+        let tile = MvtTileBuilder::new();
+        let layer = tile.layer("l").unwrap();
+        let mut feature = layer
+            .feature(&MvtGeometry::Point(point! { x: 1, y: 2 }))
+            .unwrap();
+        feature.tag_auto_int("pos", 100_i32).unwrap();
+        feature.tag_auto_int("neg", -100_i16).unwrap();
+        feature.tag_auto_int("zero", 0_i64).unwrap();
+        let bytes = feature.end().end().encode();
+
+        let reader = MvtReaderRef::new(&bytes).unwrap();
+        let layer = reader.layers().next().unwrap();
+        let feature = layer.features().next().unwrap();
+        let props = feature.properties_vec().unwrap();
+
+        // Non-negative -> UInt, negative -> SInt.
+        assert_eq!(props[0].0, "pos");
+        assert_eq!(props[0].1, MvtValueRef::UInt(100));
+        assert_eq!(props[1].0, "neg");
+        assert_eq!(props[1].1, MvtValueRef::SInt(-100));
+        assert_eq!(props[2].0, "zero");
+        assert_eq!(props[2].1, MvtValueRef::UInt(0));
+    }
+
+    #[test]
+    fn auto_int_is_never_larger_than_int_or_sint() {
+        for v in [
+            0_i64,
+            1,
+            63,
+            64,
+            127,
+            128,
+            -1,
+            -64,
+            -100,
+            i64::MIN,
+            i64::MAX,
+        ] {
+            let auto = value_to_proto(MvtValue::auto_int(v)).encoded_len();
+            let int = value_to_proto(MvtValue::Int(v)).encoded_len();
+            let sint = value_to_proto(MvtValue::SInt(v)).encoded_len();
+            assert!(auto <= int, "v={v}: auto {auto} > int {int}");
+            assert!(auto <= sint, "v={v}: auto {auto} > sint {sint}");
+        }
     }
 
     #[test]

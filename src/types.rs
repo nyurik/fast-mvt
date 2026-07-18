@@ -129,6 +129,13 @@ impl MvtFeature {
         self.add_tag(key, MvtValue::SInt(value));
     }
 
+    /// Add an integer tag using the smallest MVT encoding for `value`.
+    ///
+    /// See [`MvtValue::auto_int`] for how the encoding is chosen.
+    pub fn add_tag_auto_int(&mut self, key: impl Into<String>, value: impl Into<i64>) {
+        self.add_tag(key, MvtValue::auto_int(value));
+    }
+
     pub fn add_tag_bool(&mut self, key: impl Into<String>, value: bool) {
         self.add_tag(key, MvtValue::Bool(value));
     }
@@ -144,6 +151,26 @@ pub enum MvtValue {
     SInt(i64),
     Bool(bool),
     Null,
+}
+
+impl MvtValue {
+    /// Create an integer value using the smallest MVT wire encoding for `value`.
+    ///
+    /// Non-negative values become [`MvtValue::UInt`] (a plain varint) and negative
+    /// values become [`MvtValue::SInt`] (a zig-zag varint), whichever needs fewer
+    /// bytes. This is always at least as compact as [`MvtValue::Int`], which
+    /// sign-extends any negative to a full 10-byte varint.
+    ///
+    /// Accepts any signed integer that fits in `i64` (`i8`/`i16`/`i32`/`i64`).
+    #[must_use]
+    pub fn auto_int(value: impl Into<i64>) -> Self {
+        let value = value.into();
+        if value >= 0 {
+            Self::UInt(value.cast_unsigned())
+        } else {
+            Self::SInt(value)
+        }
+    }
 }
 
 impl From<String> for MvtValue {
@@ -352,8 +379,13 @@ mod tests {
         feature.add_tag_uint("uint", 4);
         feature.add_tag_sint("sint", -5);
         feature.add_tag_bool("bool", true);
+        feature.add_tag_auto_int("auto_pos", 6_i32);
+        feature.add_tag_auto_int("auto_neg", -7_i16);
         assert_eq!(feature.id, Some(7));
-        assert_eq!(feature.num_tags(), 8);
+        assert_eq!(feature.num_tags(), 10);
+        // Non-negative -> UInt, negative -> SInt.
+        assert_eq!(feature.properties[8].1, MvtValue::UInt(6));
+        assert_eq!(feature.properties[9].1, MvtValue::SInt(-7));
 
         let mut layer = MvtLayer::new("places", DEFAULT_EXTENT);
         assert_eq!(layer.name(), "places");
@@ -392,6 +424,23 @@ mod tests {
         assert_eq!(MvtValue::from(9_u16), MvtValue::UInt(9));
         assert_eq!(MvtValue::from(10_u8), MvtValue::UInt(10));
         assert_eq!(MvtValue::from(true), MvtValue::Bool(true));
+    }
+
+    #[test]
+    fn auto_int_picks_smallest_encoding() {
+        // Non-negative -> UInt (plain varint); negative -> SInt (zig-zag varint).
+        assert_eq!(MvtValue::auto_int(0_i64), MvtValue::UInt(0));
+        assert_eq!(MvtValue::auto_int(100_i64), MvtValue::UInt(100));
+        assert_eq!(MvtValue::auto_int(-1_i64), MvtValue::SInt(-1));
+        assert_eq!(MvtValue::auto_int(-100_i64), MvtValue::SInt(-100));
+        assert_eq!(MvtValue::auto_int(i64::MAX), MvtValue::UInt(u64::MAX / 2));
+        assert_eq!(MvtValue::auto_int(i64::MIN), MvtValue::SInt(i64::MIN));
+
+        // Accepts all narrower signed widths.
+        assert_eq!(MvtValue::auto_int(-6_i8), MvtValue::SInt(-6));
+        assert_eq!(MvtValue::auto_int(-5_i16), MvtValue::SInt(-5));
+        assert_eq!(MvtValue::auto_int(-4_i32), MvtValue::SInt(-4));
+        assert_eq!(MvtValue::auto_int(7_i32), MvtValue::UInt(7));
     }
 
     #[test]
