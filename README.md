@@ -80,6 +80,35 @@ there is no reachable partially committed layer or tile while a child is in
 progress. `MvtTileBuilder::encode()` produces the final tile bytes. A single-layer tile byte buffer is also a framed layer chunk, so
 multiple independently built layer buffers can be concatenated to form a tile.
 
+## Parallel encoding
+
+Key and value deduplication is scoped to a single layer, so layers can be built
+completely independently — one per thread.
+`MvtLayerBuilder::new()` builds a standalone layer and `encode()` returns its
+framed bytes; concatenate the buffers (in whatever order you want the layers) to
+form the final tile.
+
+```rust
+use fast_mvt::{MvtGeometry, MvtLayerBuilder, MvtResult};
+
+fn encode_tile(layers: &[(&str, MvtGeometry, &str)]) -> MvtResult<Vec<u8>> {
+    let buffers: Vec<Vec<u8>> = layers
+        // This code is single-threaded, but it is easy to parallelize
+        // with the `rayon` crate: swap `.iter()` for `.par_iter()` to encode
+        // the layers in parallel.
+        .iter()
+        .map(|(name, geom, prop)| {
+            let mut feature = MvtLayerBuilder::new(*name)?.feature(geom)?;
+            feature.tag("property", *prop)?;
+            Ok(feature.end().encode())
+        })
+        .collect::<MvtResult<_>>()?;
+
+    // Concatenate the framed layer buffers, in order, into a tile.
+    Ok(buffers.concat())
+}
+```
+
 ## Benchmarks
 
 #### Decoding
