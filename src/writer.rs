@@ -181,7 +181,7 @@ impl MvtLayerBuilder {
     ///
     /// For a builder created with [`MvtLayerBuilder::new`], the parent tile is
     /// empty, so this encodes exactly this one layer as a framed chunk — several
-    /// such buffers can be concatenated (for example with `[Vec<u8>]::concat()`)
+    /// such buffers can be concatenated (for example with `buffers.concat()`)
     /// into a multi-layer tile. For a builder obtained from
     /// [`MvtTileBuilder::layer`], the result also includes any previously
     /// committed layers, making it equivalent to `self.end().encode()`.
