@@ -39,33 +39,39 @@ impl ::buffa::MessageName for Tile {
 impl ::buffa::Message for Tile {
     /// Returns the total encoded size in bytes.
     ///
-    /// The result is a `u32`; the protobuf specification requires all
-    /// messages to fit within 2 GiB (2,147,483,647 bytes), so a
-    /// compliant message will never overflow this type.
+    /// Accumulates in `u64` (which cannot overflow for in-memory
+    /// data) and saturates to `u32` at return, so a message whose
+    /// encoded size exceeds the 2 GiB protobuf limit yields a value
+    /// above [`::buffa::MAX_MESSAGE_BYTES`] that the encode entry
+    /// points reject, never a silently wrapped size.
     #[allow(clippy::let_and_return)]
     fn compute_size(&self, __cache: &mut ::buffa::SizeCache) -> u32 {
         #[allow(unused_imports)]
         use ::buffa::Enumeration as _;
-        let mut size = 0u32;
+        let mut size = 0u64;
         for v in &self.layers {
             let __slot = __cache.reserve();
             let inner_size = v.compute_size(__cache);
             __cache.set(__slot, inner_size);
             size
-                += 1u32 + ::buffa::encoding::varint_len(inner_size as u64) as u32
-                    + inner_size;
+                += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
+                    + inner_size as u64;
         }
-        size
+        ::buffa::saturate_size(size)
     }
     fn write_to(
         &self,
         __cache: &mut ::buffa::SizeCache,
-        buf: &mut impl ::buffa::bytes::BufMut,
+        buf: &mut impl ::buffa::EncodeSink,
     ) {
         #[allow(unused_imports)]
         use ::buffa::Enumeration as _;
         for v in &self.layers {
-            ::buffa::types::put_len_delimited_header(3u32, __cache.consume_next(), buf);
+            ::buffa::types::put_len_delimited_header(
+                3u32,
+                u64::from(__cache.consume_next()),
+                buf,
+            );
             v.write_to(__cache, buf);
         }
     }
@@ -86,6 +92,9 @@ impl ::buffa::Message for Tile {
                     ::buffa::encoding::WireType::LengthDelimited,
                 )?;
                 let mut elem = ::core::default::Default::default();
+                ctx.register_element_memory(
+                    ::buffa::__private::element_footprint(&elem),
+                )?;
                 ::buffa::Message::merge_length_delimited(&mut elem, buf, ctx)?;
                 self.layers.push(elem);
             }
@@ -449,41 +458,43 @@ pub mod tile {
     impl ::buffa::Message for Value {
         /// Returns the total encoded size in bytes.
         ///
-        /// The result is a `u32`; the protobuf specification requires all
-        /// messages to fit within 2 GiB (2,147,483,647 bytes), so a
-        /// compliant message will never overflow this type.
+        /// Accumulates in `u64` (which cannot overflow for in-memory
+        /// data) and saturates to `u32` at return, so a message whose
+        /// encoded size exceeds the 2 GiB protobuf limit yields a value
+        /// above [`::buffa::MAX_MESSAGE_BYTES`] that the encode entry
+        /// points reject, never a silently wrapped size.
         #[allow(clippy::let_and_return)]
         fn compute_size(&self, _cache: &mut ::buffa::SizeCache) -> u32 {
             #[allow(unused_imports)]
             use ::buffa::Enumeration as _;
-            let mut size = 0u32;
+            let mut size = 0u64;
             if let Some(ref v) = self.string_value {
-                size += 1u32 + ::buffa::types::string_encoded_len(v) as u32;
+                size += 1u64 + ::buffa::types::string_encoded_len(v) as u64;
             }
             if self.float_value.is_some() {
-                size += 1u32 + ::buffa::types::FIXED32_ENCODED_LEN as u32;
+                size += 1u64 + ::buffa::types::FIXED32_ENCODED_LEN as u64;
             }
             if self.double_value.is_some() {
-                size += 1u32 + ::buffa::types::FIXED64_ENCODED_LEN as u32;
+                size += 1u64 + ::buffa::types::FIXED64_ENCODED_LEN as u64;
             }
             if let Some(v) = self.int_value {
-                size += 1u32 + ::buffa::types::int64_encoded_len(v) as u32;
+                size += 1u64 + ::buffa::types::int64_encoded_len(v) as u64;
             }
             if let Some(v) = self.uint_value {
-                size += 1u32 + ::buffa::types::uint64_encoded_len(v) as u32;
+                size += 1u64 + ::buffa::types::uint64_encoded_len(v) as u64;
             }
             if let Some(v) = self.sint_value {
-                size += 1u32 + ::buffa::types::sint64_encoded_len(v) as u32;
+                size += 1u64 + ::buffa::types::sint64_encoded_len(v) as u64;
             }
             if self.bool_value.is_some() {
-                size += 1u32 + ::buffa::types::BOOL_ENCODED_LEN as u32;
+                size += 1u64 + ::buffa::types::BOOL_ENCODED_LEN as u64;
             }
-            size
+            ::buffa::saturate_size(size)
         }
         fn write_to(
             &self,
             _cache: &mut ::buffa::SizeCache,
-            buf: &mut impl ::buffa::bytes::BufMut,
+            buf: &mut impl ::buffa::EncodeSink,
         ) {
             #[allow(unused_imports)]
             use ::buffa::Enumeration as _;
@@ -725,46 +736,44 @@ pub mod tile {
     impl ::buffa::Message for Feature {
         /// Returns the total encoded size in bytes.
         ///
-        /// The result is a `u32`; the protobuf specification requires all
-        /// messages to fit within 2 GiB (2,147,483,647 bytes), so a
-        /// compliant message will never overflow this type.
+        /// Accumulates in `u64` (which cannot overflow for in-memory
+        /// data) and saturates to `u32` at return, so a message whose
+        /// encoded size exceeds the 2 GiB protobuf limit yields a value
+        /// above [`::buffa::MAX_MESSAGE_BYTES`] that the encode entry
+        /// points reject, never a silently wrapped size.
         #[allow(clippy::let_and_return)]
         fn compute_size(&self, _cache: &mut ::buffa::SizeCache) -> u32 {
             #[allow(unused_imports)]
             use ::buffa::Enumeration as _;
-            let mut size = 0u32;
+            let mut size = 0u64;
             if let Some(v) = self.id {
-                size += 1u32 + ::buffa::types::uint64_encoded_len(v) as u32;
+                size += 1u64 + ::buffa::types::uint64_encoded_len(v) as u64;
             }
             if !self.tags.is_empty() {
-                let payload: u32 = self
+                let payload: u64 = self
                     .tags
                     .iter()
-                    .map(|&v| ::buffa::types::uint32_encoded_len(v) as u32)
-                    .sum::<u32>();
-                size
-                    += 1u32 + ::buffa::encoding::varint_len(payload as u64) as u32
-                        + payload;
+                    .map(|&v| ::buffa::types::uint32_encoded_len(v) as u64)
+                    .sum::<u64>();
+                size += 1u64 + ::buffa::encoding::varint_len(payload) as u64 + payload;
             }
             if let Some(ref v) = self.r#type {
-                size += 1u32 + ::buffa::types::int32_encoded_len(v.to_i32()) as u32;
+                size += 1u64 + ::buffa::types::int32_encoded_len(v.to_i32()) as u64;
             }
             if !self.geometry.is_empty() {
-                let payload: u32 = self
+                let payload: u64 = self
                     .geometry
                     .iter()
-                    .map(|&v| ::buffa::types::uint32_encoded_len(v) as u32)
-                    .sum::<u32>();
-                size
-                    += 1u32 + ::buffa::encoding::varint_len(payload as u64) as u32
-                        + payload;
+                    .map(|&v| ::buffa::types::uint32_encoded_len(v) as u64)
+                    .sum::<u64>();
+                size += 1u64 + ::buffa::encoding::varint_len(payload) as u64 + payload;
             }
-            size
+            ::buffa::saturate_size(size)
         }
         fn write_to(
             &self,
             _cache: &mut ::buffa::SizeCache,
-            buf: &mut impl ::buffa::bytes::BufMut,
+            buf: &mut impl ::buffa::EncodeSink,
         ) {
             #[allow(unused_imports)]
             use ::buffa::Enumeration as _;
@@ -772,11 +781,11 @@ pub mod tile {
                 ::buffa::types::put_uint64_field(1u32, v, buf);
             }
             if !self.tags.is_empty() {
-                let payload: u32 = self
+                let payload: u64 = self
                     .tags
                     .iter()
-                    .map(|&v| ::buffa::types::uint32_encoded_len(v) as u32)
-                    .sum::<u32>();
+                    .map(|&v| ::buffa::types::uint32_encoded_len(v) as u64)
+                    .sum::<u64>();
                 ::buffa::types::put_len_delimited_header(2u32, payload, buf);
                 for &v in &self.tags {
                     ::buffa::types::encode_uint32(v, buf);
@@ -786,11 +795,11 @@ pub mod tile {
                 ::buffa::types::put_int32_field(3u32, v.to_i32(), buf);
             }
             if !self.geometry.is_empty() {
-                let payload: u32 = self
+                let payload: u64 = self
                     .geometry
                     .iter()
-                    .map(|&v| ::buffa::types::uint32_encoded_len(v) as u32)
-                    .sum::<u32>();
+                    .map(|&v| ::buffa::types::uint32_encoded_len(v) as u64)
+                    .sum::<u64>();
                 ::buffa::types::put_len_delimited_header(4u32, payload, buf);
                 for &v in &self.geometry {
                     ::buffa::types::encode_uint32(v, buf);
@@ -827,14 +836,24 @@ pub mod tile {
                                 ::buffa::DecodeError::UnexpectedEof,
                             );
                         }
-                        self.tags.reserve(len);
-                        let mut limited = buf.take(len);
-                        while limited.has_remaining() {
-                            self.tags.push(::buffa::types::decode_uint32(&mut limited)?);
-                        }
-                        let leftover = limited.remaining();
-                        if leftover > 0 {
-                            limited.advance(leftover);
+                        if buf.chunk().len() >= len {
+                            ::buffa::types::extend_packed_uint32(
+                                &buf.chunk()[..len],
+                                &mut self.tags,
+                                len,
+                            )?;
+                            buf.advance(len);
+                        } else {
+                            self.tags.reserve(len);
+                            let mut limited = buf.take(len);
+                            while limited.has_remaining() {
+                                self.tags
+                                    .push(::buffa::types::decode_uint32_packed(&mut limited)?);
+                            }
+                            let leftover = limited.remaining();
+                            if leftover > 0 {
+                                limited.advance(leftover);
+                            }
                         }
                     } else if tag.wire_type() == ::buffa::encoding::WireType::Varint {
                         self.tags.push(::buffa::types::decode_uint32(buf)?);
@@ -857,7 +876,7 @@ pub mod tile {
                         __raw,
                     ) {
                         self.r#type = ::core::option::Option::Some(__v);
-                    } else {}
+                    }
                 }
                 4u32 => {
                     if tag.wire_type() == ::buffa::encoding::WireType::LengthDelimited {
@@ -869,15 +888,24 @@ pub mod tile {
                                 ::buffa::DecodeError::UnexpectedEof,
                             );
                         }
-                        self.geometry.reserve(len);
-                        let mut limited = buf.take(len);
-                        while limited.has_remaining() {
-                            self.geometry
-                                .push(::buffa::types::decode_uint32(&mut limited)?);
-                        }
-                        let leftover = limited.remaining();
-                        if leftover > 0 {
-                            limited.advance(leftover);
+                        if buf.chunk().len() >= len {
+                            ::buffa::types::extend_packed_uint32(
+                                &buf.chunk()[..len],
+                                &mut self.geometry,
+                                len,
+                            )?;
+                            buf.advance(len);
+                        } else {
+                            self.geometry.reserve(len);
+                            let mut limited = buf.take(len);
+                            while limited.has_remaining() {
+                                self.geometry
+                                    .push(::buffa::types::decode_uint32_packed(&mut limited)?);
+                            }
+                            let leftover = limited.remaining();
+                            if leftover > 0 {
+                                limited.advance(leftover);
+                            }
                         }
                     } else if tag.wire_type() == ::buffa::encoding::WireType::Varint {
                         self.geometry.push(::buffa::types::decode_uint32(buf)?);
@@ -1048,44 +1076,46 @@ pub mod tile {
     impl ::buffa::Message for Layer {
         /// Returns the total encoded size in bytes.
         ///
-        /// The result is a `u32`; the protobuf specification requires all
-        /// messages to fit within 2 GiB (2,147,483,647 bytes), so a
-        /// compliant message will never overflow this type.
+        /// Accumulates in `u64` (which cannot overflow for in-memory
+        /// data) and saturates to `u32` at return, so a message whose
+        /// encoded size exceeds the 2 GiB protobuf limit yields a value
+        /// above [`::buffa::MAX_MESSAGE_BYTES`] that the encode entry
+        /// points reject, never a silently wrapped size.
         #[allow(clippy::let_and_return)]
         fn compute_size(&self, __cache: &mut ::buffa::SizeCache) -> u32 {
             #[allow(unused_imports)]
             use ::buffa::Enumeration as _;
-            let mut size = 0u32;
-            size += 1u32 + ::buffa::types::string_encoded_len(&self.name) as u32;
+            let mut size = 0u64;
+            size += 1u64 + ::buffa::types::string_encoded_len(&self.name) as u64;
             for v in &self.features {
                 let __slot = __cache.reserve();
                 let inner_size = v.compute_size(__cache);
                 __cache.set(__slot, inner_size);
                 size
-                    += 1u32 + ::buffa::encoding::varint_len(inner_size as u64) as u32
-                        + inner_size;
+                    += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
+                        + inner_size as u64;
             }
             for v in &self.keys {
-                size += 1u32 + ::buffa::types::string_encoded_len(v) as u32;
+                size += 1u64 + ::buffa::types::string_encoded_len(v) as u64;
             }
             for v in &self.values {
                 let __slot = __cache.reserve();
                 let inner_size = v.compute_size(__cache);
                 __cache.set(__slot, inner_size);
                 size
-                    += 1u32 + ::buffa::encoding::varint_len(inner_size as u64) as u32
-                        + inner_size;
+                    += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
+                        + inner_size as u64;
             }
             if let Some(v) = self.extent {
-                size += 1u32 + ::buffa::types::uint32_encoded_len(v) as u32;
+                size += 1u64 + ::buffa::types::uint32_encoded_len(v) as u64;
             }
-            size += 1u32 + ::buffa::types::uint32_encoded_len(self.version) as u32;
-            size
+            size += 1u64 + ::buffa::types::uint32_encoded_len(self.version) as u64;
+            ::buffa::saturate_size(size)
         }
         fn write_to(
             &self,
             __cache: &mut ::buffa::SizeCache,
-            buf: &mut impl ::buffa::bytes::BufMut,
+            buf: &mut impl ::buffa::EncodeSink,
         ) {
             #[allow(unused_imports)]
             use ::buffa::Enumeration as _;
@@ -1093,7 +1123,7 @@ pub mod tile {
             for v in &self.features {
                 ::buffa::types::put_len_delimited_header(
                     2u32,
-                    __cache.consume_next(),
+                    u64::from(__cache.consume_next()),
                     buf,
                 );
                 v.write_to(__cache, buf);
@@ -1104,7 +1134,7 @@ pub mod tile {
             for v in &self.values {
                 ::buffa::types::put_len_delimited_header(
                     4u32,
-                    __cache.consume_next(),
+                    u64::from(__cache.consume_next()),
                     buf,
                 );
                 v.write_to(__cache, buf);
@@ -1138,6 +1168,9 @@ pub mod tile {
                         ::buffa::encoding::WireType::LengthDelimited,
                     )?;
                     let mut elem = ::core::default::Default::default();
+                    ctx.register_element_memory(
+                        ::buffa::__private::element_footprint(&elem),
+                    )?;
                     ::buffa::Message::merge_length_delimited(&mut elem, buf, ctx)?;
                     self.features.push(elem);
                 }
@@ -1146,7 +1179,11 @@ pub mod tile {
                         tag,
                         ::buffa::encoding::WireType::LengthDelimited,
                     )?;
-                    self.keys.push(::buffa::types::decode_string(buf)?);
+                    let __elem = ::buffa::types::decode_string(buf)?;
+                    ctx.register_element_memory(
+                        ::buffa::__private::element_footprint(&__elem),
+                    )?;
+                    self.keys.push(__elem);
                 }
                 4u32 => {
                     ::buffa::encoding::check_wire_type(
@@ -1154,6 +1191,9 @@ pub mod tile {
                         ::buffa::encoding::WireType::LengthDelimited,
                     )?;
                     let mut elem = ::core::default::Default::default();
+                    ctx.register_element_memory(
+                        ::buffa::__private::element_footprint(&elem),
+                    )?;
                     ::buffa::Message::merge_length_delimited(&mut elem, buf, ctx)?;
                     self.values.push(elem);
                 }

@@ -183,6 +183,7 @@ udeps:  (cargo-install 'cargo-udeps')
 update:
     cargo +nightly -Z unstable-options update --breaking
     cargo update
+    {{just}} update-generated
 
 # Ensure that a certain command is available
 [private]

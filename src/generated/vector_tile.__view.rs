@@ -24,6 +24,7 @@ impl<'a> ::buffa::MessageView<'a> for TileView<'a> {
     ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
         <Self as ::buffa::MessageView>::decode_view_ctx(buf, ctx)
     }
+    #[inline]
     fn merge_view_field(
         &mut self,
         tag: ::buffa::encoding::Tag,
@@ -43,6 +44,11 @@ impl<'a> ::buffa::MessageView<'a> for TileView<'a> {
                 )?;
                 let __sub_ctx = ctx.descend()?;
                 let sub = ::buffa::types::borrow_bytes(&mut cur)?;
+                ctx.register_element_memory(
+                    ::core::mem::size_of::<
+                        super::super::__buffa::view::tile::LayerView,
+                    >(),
+                )?;
                 view.layers
                     .push(
                         <super::super::__buffa::view::tile::LayerView as ::buffa::MessageView>::decode_view_ctx(
@@ -85,27 +91,31 @@ impl<'a> ::buffa::ViewEncode<'a> for TileView<'a> {
     fn compute_size(&self, __cache: &mut ::buffa::SizeCache) -> u32 {
         #[allow(unused_imports)]
         use ::buffa::Enumeration as _;
-        let mut size = 0u32;
+        let mut size = 0u64;
         for v in &self.layers {
             let __slot = __cache.reserve();
             let inner_size = v.compute_size(__cache);
             __cache.set(__slot, inner_size);
             size
-                += 1u32 + ::buffa::encoding::varint_len(inner_size as u64) as u32
-                    + inner_size;
+                += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
+                    + inner_size as u64;
         }
-        size
+        ::buffa::saturate_size(size)
     }
     #[allow(clippy::needless_borrow)]
     fn write_to(
         &self,
         __cache: &mut ::buffa::SizeCache,
-        buf: &mut impl ::buffa::bytes::BufMut,
+        buf: &mut impl ::buffa::EncodeSink,
     ) {
         #[allow(unused_imports)]
         use ::buffa::Enumeration as _;
         for v in &self.layers {
-            ::buffa::types::put_len_delimited_header(3u32, __cache.consume_next(), buf);
+            ::buffa::types::put_len_delimited_header(
+                3u32,
+                u64::from(__cache.consume_next()),
+                buf,
+            );
             v.write_to(__cache, buf);
         }
     }
@@ -184,7 +194,9 @@ impl TileOwnedView {
     ///
     /// # Errors
     ///
-    /// Returns [`::buffa::DecodeError`] if the re-encoded bytes are
+    /// Returns [`::buffa::DecodeError::MessageTooLarge`] if the
+    /// message's encoded size exceeds the 2 GiB protobuf limit, or
+    /// another [`::buffa::DecodeError`] if the re-encoded bytes are
     /// somehow invalid (should not happen for well-formed messages).
     pub fn from_owned(
         msg: &super::super::Tile,
@@ -198,13 +210,13 @@ impl TileOwnedView {
     }
     /// Convert to the owned message type.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if re-materializing preserved unknown fields
-    /// fails (e.g. the unknown-field limit is exceeded).
-    pub fn to_owned_message(
-        &self,
-    ) -> ::core::result::Result<super::super::Tile, ::buffa::DecodeError> {
+    /// Infallible: this type's constructors wire-decode their
+    /// buffer, and a view produced by wire decoding always
+    /// converts. Delegates to [`::buffa::OwnedView::to_owned_message`],
+    /// whose contract also governs handles converted from a raw
+    /// [`::buffa::OwnedView`].
+    #[must_use]
+    pub fn to_owned_message(&self) -> super::super::Tile {
         self.0.to_owned_message()
     }
     /// The underlying bytes buffer.
@@ -294,6 +306,7 @@ pub mod tile {
         ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
             <Self as ::buffa::MessageView>::decode_view_ctx(buf, ctx)
         }
+        #[inline]
         fn merge_view_field(
             &mut self,
             tag: ::buffa::encoding::Tag,
@@ -397,35 +410,35 @@ pub mod tile {
         fn compute_size(&self, _cache: &mut ::buffa::SizeCache) -> u32 {
             #[allow(unused_imports)]
             use ::buffa::Enumeration as _;
-            let mut size = 0u32;
+            let mut size = 0u64;
             if let Some(ref v) = self.string_value {
-                size += 1u32 + ::buffa::types::string_encoded_len(v) as u32;
+                size += 1u64 + ::buffa::types::string_encoded_len(v) as u64;
             }
             if self.float_value.is_some() {
-                size += 1u32 + ::buffa::types::FIXED32_ENCODED_LEN as u32;
+                size += 1u64 + ::buffa::types::FIXED32_ENCODED_LEN as u64;
             }
             if self.double_value.is_some() {
-                size += 1u32 + ::buffa::types::FIXED64_ENCODED_LEN as u32;
+                size += 1u64 + ::buffa::types::FIXED64_ENCODED_LEN as u64;
             }
             if let Some(v) = self.int_value {
-                size += 1u32 + ::buffa::types::int64_encoded_len(v) as u32;
+                size += 1u64 + ::buffa::types::int64_encoded_len(v) as u64;
             }
             if let Some(v) = self.uint_value {
-                size += 1u32 + ::buffa::types::uint64_encoded_len(v) as u32;
+                size += 1u64 + ::buffa::types::uint64_encoded_len(v) as u64;
             }
             if let Some(v) = self.sint_value {
-                size += 1u32 + ::buffa::types::sint64_encoded_len(v) as u32;
+                size += 1u64 + ::buffa::types::sint64_encoded_len(v) as u64;
             }
             if self.bool_value.is_some() {
-                size += 1u32 + ::buffa::types::BOOL_ENCODED_LEN as u32;
+                size += 1u64 + ::buffa::types::BOOL_ENCODED_LEN as u64;
             }
-            size
+            ::buffa::saturate_size(size)
         }
         #[allow(clippy::needless_borrow)]
         fn write_to(
             &self,
             _cache: &mut ::buffa::SizeCache,
-            buf: &mut impl ::buffa::bytes::BufMut,
+            buf: &mut impl ::buffa::EncodeSink,
         ) {
             #[allow(unused_imports)]
             use ::buffa::Enumeration as _;
@@ -566,7 +579,9 @@ pub mod tile {
         ///
         /// # Errors
         ///
-        /// Returns [`::buffa::DecodeError`] if the re-encoded bytes are
+        /// Returns [`::buffa::DecodeError::MessageTooLarge`] if the
+        /// message's encoded size exceeds the 2 GiB protobuf limit, or
+        /// another [`::buffa::DecodeError`] if the re-encoded bytes are
         /// somehow invalid (should not happen for well-formed messages).
         pub fn from_owned(
             msg: &super::super::super::tile::Value,
@@ -582,16 +597,13 @@ pub mod tile {
         }
         /// Convert to the owned message type.
         ///
-        /// # Errors
-        ///
-        /// Returns an error if re-materializing preserved unknown fields
-        /// fails (e.g. the unknown-field limit is exceeded).
-        pub fn to_owned_message(
-            &self,
-        ) -> ::core::result::Result<
-            super::super::super::tile::Value,
-            ::buffa::DecodeError,
-        > {
+        /// Infallible: this type's constructors wire-decode their
+        /// buffer, and a view produced by wire decoding always
+        /// converts. Delegates to [`::buffa::OwnedView::to_owned_message`],
+        /// whose contract also governs handles converted from a raw
+        /// [`::buffa::OwnedView`].
+        #[must_use]
+        pub fn to_owned_message(&self) -> super::super::super::tile::Value {
             self.0.to_owned_message()
         }
         /// The underlying bytes buffer.
@@ -713,6 +725,7 @@ pub mod tile {
         ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
             <Self as ::buffa::MessageView>::decode_view_ctx(buf, ctx)
         }
+        #[inline]
         fn merge_view_field(
             &mut self,
             tag: ::buffa::encoding::Tag,
@@ -742,16 +755,16 @@ pub mod tile {
                         __raw,
                     ) {
                         view.r#type = Some(__v);
-                    } else {}
+                    }
                 }
                 2u32 => {
                     if tag.wire_type() == ::buffa::encoding::WireType::LengthDelimited {
                         let payload = ::buffa::types::borrow_bytes(&mut cur)?;
-                        view.tags.reserve(::buffa::encoding::count_varints(payload));
-                        let mut pcur: &[u8] = payload;
-                        while !pcur.is_empty() {
-                            view.tags.push(::buffa::types::decode_uint32(&mut pcur)?);
-                        }
+                        ::buffa::types::extend_packed_uint32(
+                            payload,
+                            view.tags.as_mut_vec(),
+                            ::buffa::encoding::count_varints(payload),
+                        )?;
                     } else if tag.wire_type() == ::buffa::encoding::WireType::Varint {
                         view.tags.push(::buffa::types::decode_uint32(&mut cur)?);
                     } else {
@@ -766,12 +779,11 @@ pub mod tile {
                 4u32 => {
                     if tag.wire_type() == ::buffa::encoding::WireType::LengthDelimited {
                         let payload = ::buffa::types::borrow_bytes(&mut cur)?;
-                        view.geometry.reserve(::buffa::encoding::count_varints(payload));
-                        let mut pcur: &[u8] = payload;
-                        while !pcur.is_empty() {
-                            view.geometry
-                                .push(::buffa::types::decode_uint32(&mut pcur)?);
-                        }
+                        ::buffa::types::extend_packed_uint32(
+                            payload,
+                            view.geometry.as_mut_vec(),
+                            ::buffa::encoding::count_varints(payload),
+                        )?;
                     } else if tag.wire_type() == ::buffa::encoding::WireType::Varint {
                         view.geometry.push(::buffa::types::decode_uint32(&mut cur)?);
                     } else {
@@ -822,40 +834,36 @@ pub mod tile {
         fn compute_size(&self, _cache: &mut ::buffa::SizeCache) -> u32 {
             #[allow(unused_imports)]
             use ::buffa::Enumeration as _;
-            let mut size = 0u32;
+            let mut size = 0u64;
             if let Some(v) = self.id {
-                size += 1u32 + ::buffa::types::uint64_encoded_len(v) as u32;
+                size += 1u64 + ::buffa::types::uint64_encoded_len(v) as u64;
             }
             if !self.tags.is_empty() {
-                let payload: u32 = self
+                let payload: u64 = self
                     .tags
                     .iter()
-                    .map(|&v| ::buffa::types::uint32_encoded_len(v) as u32)
-                    .sum::<u32>();
-                size
-                    += 1u32 + ::buffa::encoding::varint_len(payload as u64) as u32
-                        + payload;
+                    .map(|&v| ::buffa::types::uint32_encoded_len(v) as u64)
+                    .sum::<u64>();
+                size += 1u64 + ::buffa::encoding::varint_len(payload) as u64 + payload;
             }
             if let Some(ref v) = self.r#type {
-                size += 1u32 + ::buffa::types::int32_encoded_len(v.to_i32()) as u32;
+                size += 1u64 + ::buffa::types::int32_encoded_len(v.to_i32()) as u64;
             }
             if !self.geometry.is_empty() {
-                let payload: u32 = self
+                let payload: u64 = self
                     .geometry
                     .iter()
-                    .map(|&v| ::buffa::types::uint32_encoded_len(v) as u32)
-                    .sum::<u32>();
-                size
-                    += 1u32 + ::buffa::encoding::varint_len(payload as u64) as u32
-                        + payload;
+                    .map(|&v| ::buffa::types::uint32_encoded_len(v) as u64)
+                    .sum::<u64>();
+                size += 1u64 + ::buffa::encoding::varint_len(payload) as u64 + payload;
             }
-            size
+            ::buffa::saturate_size(size)
         }
         #[allow(clippy::needless_borrow)]
         fn write_to(
             &self,
             _cache: &mut ::buffa::SizeCache,
-            buf: &mut impl ::buffa::bytes::BufMut,
+            buf: &mut impl ::buffa::EncodeSink,
         ) {
             #[allow(unused_imports)]
             use ::buffa::Enumeration as _;
@@ -863,11 +871,11 @@ pub mod tile {
                 ::buffa::types::put_uint64_field(1u32, v, buf);
             }
             if !self.tags.is_empty() {
-                let payload: u32 = self
+                let payload: u64 = self
                     .tags
                     .iter()
-                    .map(|&v| ::buffa::types::uint32_encoded_len(v) as u32)
-                    .sum::<u32>();
+                    .map(|&v| ::buffa::types::uint32_encoded_len(v) as u64)
+                    .sum::<u64>();
                 ::buffa::types::put_len_delimited_header(2u32, payload, buf);
                 for &v in &self.tags {
                     ::buffa::types::encode_uint32(v, buf);
@@ -877,11 +885,11 @@ pub mod tile {
                 ::buffa::types::put_int32_field(3u32, v.to_i32(), buf);
             }
             if !self.geometry.is_empty() {
-                let payload: u32 = self
+                let payload: u64 = self
                     .geometry
                     .iter()
-                    .map(|&v| ::buffa::types::uint32_encoded_len(v) as u32)
-                    .sum::<u32>();
+                    .map(|&v| ::buffa::types::uint32_encoded_len(v) as u64)
+                    .sum::<u64>();
                 ::buffa::types::put_len_delimited_header(4u32, payload, buf);
                 for &v in &self.geometry {
                     ::buffa::types::encode_uint32(v, buf);
@@ -986,7 +994,9 @@ pub mod tile {
         ///
         /// # Errors
         ///
-        /// Returns [`::buffa::DecodeError`] if the re-encoded bytes are
+        /// Returns [`::buffa::DecodeError::MessageTooLarge`] if the
+        /// message's encoded size exceeds the 2 GiB protobuf limit, or
+        /// another [`::buffa::DecodeError`] if the re-encoded bytes are
         /// somehow invalid (should not happen for well-formed messages).
         pub fn from_owned(
             msg: &super::super::super::tile::Feature,
@@ -1002,16 +1012,13 @@ pub mod tile {
         }
         /// Convert to the owned message type.
         ///
-        /// # Errors
-        ///
-        /// Returns an error if re-materializing preserved unknown fields
-        /// fails (e.g. the unknown-field limit is exceeded).
-        pub fn to_owned_message(
-            &self,
-        ) -> ::core::result::Result<
-            super::super::super::tile::Feature,
-            ::buffa::DecodeError,
-        > {
+        /// Infallible: this type's constructors wire-decode their
+        /// buffer, and a view produced by wire decoding always
+        /// converts. Delegates to [`::buffa::OwnedView::to_owned_message`],
+        /// whose contract also governs handles converted from a raw
+        /// [`::buffa::OwnedView`].
+        #[must_use]
+        pub fn to_owned_message(&self) -> super::super::super::tile::Feature {
             self.0.to_owned_message()
         }
         /// The underlying bytes buffer.
@@ -1162,6 +1169,7 @@ Distinguishes a field that was absent from one explicitly encoded with its defau
         ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
             <Self as ::buffa::MessageView>::decode_view_ctx(buf, ctx)
         }
+        #[inline]
         fn merge_view_field(
             &mut self,
             tag: ::buffa::encoding::Tag,
@@ -1204,6 +1212,11 @@ Distinguishes a field that was absent from one explicitly encoded with its defau
                     )?;
                     let __sub_ctx = ctx.descend()?;
                     let sub = ::buffa::types::borrow_bytes(&mut cur)?;
+                    ctx.register_element_memory(
+                        ::core::mem::size_of::<
+                            super::super::super::__buffa::view::tile::FeatureView,
+                        >(),
+                    )?;
                     view.features
                         .push(
                             <super::super::super::__buffa::view::tile::FeatureView as ::buffa::MessageView>::decode_view_ctx(
@@ -1217,7 +1230,11 @@ Distinguishes a field that was absent from one explicitly encoded with its defau
                         tag,
                         ::buffa::encoding::WireType::LengthDelimited,
                     )?;
-                    view.keys.push(::buffa::types::borrow_str(&mut cur)?);
+                    let __elem = ::buffa::types::borrow_str(&mut cur)?;
+                    ctx.register_element_memory(
+                        ::buffa::__private::element_footprint(&__elem),
+                    )?;
+                    view.keys.push(__elem);
                 }
                 4u32 => {
                     ::buffa::encoding::check_wire_type(
@@ -1226,6 +1243,11 @@ Distinguishes a field that was absent from one explicitly encoded with its defau
                     )?;
                     let __sub_ctx = ctx.descend()?;
                     let sub = ::buffa::types::borrow_bytes(&mut cur)?;
+                    ctx.register_element_memory(
+                        ::core::mem::size_of::<
+                            super::super::super::__buffa::view::tile::ValueView,
+                        >(),
+                    )?;
                     view.values
                         .push(
                             <super::super::super::__buffa::view::tile::ValueView as ::buffa::MessageView>::decode_view_ctx(
@@ -1283,38 +1305,38 @@ Distinguishes a field that was absent from one explicitly encoded with its defau
         fn compute_size(&self, __cache: &mut ::buffa::SizeCache) -> u32 {
             #[allow(unused_imports)]
             use ::buffa::Enumeration as _;
-            let mut size = 0u32;
-            size += 1u32 + ::buffa::types::string_encoded_len(&self.name) as u32;
+            let mut size = 0u64;
+            size += 1u64 + ::buffa::types::string_encoded_len(&self.name) as u64;
             for v in &self.features {
                 let __slot = __cache.reserve();
                 let inner_size = v.compute_size(__cache);
                 __cache.set(__slot, inner_size);
                 size
-                    += 1u32 + ::buffa::encoding::varint_len(inner_size as u64) as u32
-                        + inner_size;
+                    += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
+                        + inner_size as u64;
             }
             for v in &self.keys {
-                size += 1u32 + ::buffa::types::string_encoded_len(v) as u32;
+                size += 1u64 + ::buffa::types::string_encoded_len(v) as u64;
             }
             for v in &self.values {
                 let __slot = __cache.reserve();
                 let inner_size = v.compute_size(__cache);
                 __cache.set(__slot, inner_size);
                 size
-                    += 1u32 + ::buffa::encoding::varint_len(inner_size as u64) as u32
-                        + inner_size;
+                    += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
+                        + inner_size as u64;
             }
             if let Some(v) = self.extent {
-                size += 1u32 + ::buffa::types::uint32_encoded_len(v) as u32;
+                size += 1u64 + ::buffa::types::uint32_encoded_len(v) as u64;
             }
-            size += 1u32 + ::buffa::types::uint32_encoded_len(self.version) as u32;
-            size
+            size += 1u64 + ::buffa::types::uint32_encoded_len(self.version) as u64;
+            ::buffa::saturate_size(size)
         }
         #[allow(clippy::needless_borrow)]
         fn write_to(
             &self,
             __cache: &mut ::buffa::SizeCache,
-            buf: &mut impl ::buffa::bytes::BufMut,
+            buf: &mut impl ::buffa::EncodeSink,
         ) {
             #[allow(unused_imports)]
             use ::buffa::Enumeration as _;
@@ -1322,7 +1344,7 @@ Distinguishes a field that was absent from one explicitly encoded with its defau
             for v in &self.features {
                 ::buffa::types::put_len_delimited_header(
                     2u32,
-                    __cache.consume_next(),
+                    u64::from(__cache.consume_next()),
                     buf,
                 );
                 v.write_to(__cache, buf);
@@ -1333,7 +1355,7 @@ Distinguishes a field that was absent from one explicitly encoded with its defau
             for v in &self.values {
                 ::buffa::types::put_len_delimited_header(
                     4u32,
-                    __cache.consume_next(),
+                    u64::from(__cache.consume_next()),
                     buf,
                 );
                 v.write_to(__cache, buf);
@@ -1440,7 +1462,9 @@ Distinguishes a field that was absent from one explicitly encoded with its defau
         ///
         /// # Errors
         ///
-        /// Returns [`::buffa::DecodeError`] if the re-encoded bytes are
+        /// Returns [`::buffa::DecodeError::MessageTooLarge`] if the
+        /// message's encoded size exceeds the 2 GiB protobuf limit, or
+        /// another [`::buffa::DecodeError`] if the re-encoded bytes are
         /// somehow invalid (should not happen for well-formed messages).
         pub fn from_owned(
             msg: &super::super::super::tile::Layer,
@@ -1456,16 +1480,13 @@ Distinguishes a field that was absent from one explicitly encoded with its defau
         }
         /// Convert to the owned message type.
         ///
-        /// # Errors
-        ///
-        /// Returns an error if re-materializing preserved unknown fields
-        /// fails (e.g. the unknown-field limit is exceeded).
-        pub fn to_owned_message(
-            &self,
-        ) -> ::core::result::Result<
-            super::super::super::tile::Layer,
-            ::buffa::DecodeError,
-        > {
+        /// Infallible: this type's constructors wire-decode their
+        /// buffer, and a view produced by wire decoding always
+        /// converts. Delegates to [`::buffa::OwnedView::to_owned_message`],
+        /// whose contract also governs handles converted from a raw
+        /// [`::buffa::OwnedView`].
+        #[must_use]
+        pub fn to_owned_message(&self) -> super::super::super::tile::Layer {
             self.0.to_owned_message()
         }
         /// The underlying bytes buffer.
