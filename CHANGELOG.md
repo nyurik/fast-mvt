@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1](https://github.com/nyurik/fast-mvt/compare/v0.6.0...v0.6.1) - 2026-07-18
+
+### Added
+
+- add tag_auto_int to pick most compact int store ([#30](https://github.com/nyurik/fast-mvt/pull/30))
+
+### Other
+
+- simplify parallel usage, add docs ([#31](https://github.com/nyurik/fast-mvt/pull/31))
+- update readme
+
 ## [0.6.0](https://github.com/nyurik/fast-mvt/compare/v0.5.0...v0.6.0) - 2026-07-18
 
 ### Other
