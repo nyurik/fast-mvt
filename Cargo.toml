@@ -1,6 +1,6 @@
 [package]
 name = "fast-mvt"
-version = "0.4.1"
+version = "0.5.0"
 description = "Fast Mapbox Vector Tile (MVT) reader and writer"
 authors = ["Yuri Astrakhan <YuriAstrakhan@gmail.com>"]
 repository = "https://github.com/nyurik/fast-mvt"
@@ -56,6 +56,7 @@ buffa-build = { version = "0.9.0", optional = true }
 [dev-dependencies]
 anyhow = "1"
 criterion = { version = "0.8", features = ["html_reports"] }
+insta = "1.43"
 mvt = "0.14.0"
 mvt-reader = "2.3.0"
 prost = "0.14.3"
@@ -69,6 +70,9 @@ unused_qualifications = "warn"
 
 [lints.clippy]
 # Restrictions
+# `deny`, not `forbid`: clap's derive macros emit `#[allow(clippy::style)]`, and
+# `disallowed_methods` is a `style` lint, so `forbid` would break compilation
+disallowed_methods = "deny"
 panic_in_result_fn = "warn"
 todo = "warn"
 unwrap_used = "warn"

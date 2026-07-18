@@ -209,7 +209,7 @@ fn parse_polygons(data: &[u32]) -> MvtResult<MvtGeometry> {
 
 #[cfg(all(test, feature = "writer", feature = "reader"))]
 mod tests {
-    use geo_types::{Coord, Geometry};
+    use geo_types::{Geometry, coord};
 
     use super::*;
 
@@ -218,7 +218,7 @@ mod tests {
         let Geometry::LineString(line) = parse_linestrings(&[9, 4, 6]).unwrap() else {
             panic!("expected line");
         };
-        assert_eq!(line.0, vec![Coord { x: 2, y: 3 }]);
+        assert_eq!(line.0, vec![coord! { x: 2, y: 3 }]);
 
         let Geometry::MultiLineString(lines) = parse_linestrings(&[9, 4, 6, 9, 2, 2]).unwrap()
         else {
@@ -229,12 +229,15 @@ mod tests {
         let Geometry::Polygon(poly) = parse_polygons(&[9, 0, 0, 15]).unwrap() else {
             panic!("expected polygon");
         };
-        assert_eq!(poly.exterior().0, vec![(0, 0).into(), (0, 0).into()]);
+        assert_eq!(
+            poly.exterior().0,
+            vec![coord! { x: 0, y: 0 }, coord! { x: 0, y: 0 }]
+        );
     }
 
     #[test]
     fn direct_helper_edge_paths_are_covered() {
-        let mut cursor = Coord { x: 0, y: 0 };
+        let mut cursor = coord! { x: 0, y: 0 };
         let info = line_info(&[9, 0, 0, 15]).unwrap();
         assert!(matches!(
             parse_line_slice(&mut cursor, &[9, 0, 0, 15], info),
@@ -267,7 +270,7 @@ mod tests {
     #[test]
     fn invalid_geometry_streams_are_rejected() {
         assert!(matches!(
-            decode_coord(&mut (0, 0).into(), &[1]),
+            decode_coord(&mut coord! { x: 0, y: 0 }, &[1]),
             Err(MvtError::InvalidGeometry)
         ));
         assert!(matches!(

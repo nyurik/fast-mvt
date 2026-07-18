@@ -67,17 +67,17 @@ fn write_tile() -> MvtResult<Vec<u8>> {
     feature.id(Some(7));
     feature.tag("name", "Example")?;
     feature.tag("visible", true)?;
-    let layer = feature.finish();
+    let layer = feature.end();
 
-    let tile = layer.finish();
-    Ok(tile.finish())
+    let tile = layer.end();
+    Ok(tile.encode())
 }
 ```
 
 Opening a layer consumes the tile builder, and opening a feature consumes the
-layer builder. Finishing returns the parent builder with the child committed, so
+layer builder. `end()` returns the parent builder with the child committed, so
 there is no reachable partially committed layer or tile while a child is in
-progress. A single-layer tile byte buffer is also a framed layer chunk, so
+progress. `MvtTileBuilder::encode()` produces the final tile bytes. A single-layer tile byte buffer is also a framed layer chunk, so
 multiple independently built layer buffers can be concatenated to form a tile.
 
 ## Benchmarks
