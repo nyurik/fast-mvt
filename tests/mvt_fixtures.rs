@@ -25,7 +25,7 @@ fn mvt_reader_fixture([mvt]: [&Path; 1]) {
         let value = reader.expect("readable MVT file");
         if is_valid_v2 {
             let mut expected = read_tile_json(&tile);
-            let mut actual = Tile::from_reader(&value);
+            let mut actual = Tile::from_reader(&value).expect("proto conversion");
             normalize_default_geometry_types(&mut expected);
             normalize_default_geometry_types(&mut actual);
             assert_eq!(actual, expected, "{}", tile.display());
@@ -53,7 +53,7 @@ fn unknown_value_field_fixture(path: &Path) -> bool {
 }
 
 fn assert_recoverable_fixture_is_readable(reader: &MvtReaderRef<'_>, path: &Path) {
-    let tile = Tile::from_reader(reader);
+    let tile = Tile::from_reader(reader).expect("proto conversion");
     assert!(
         !tile.layers.is_empty(),
         "{}: recoverable fixture should decode at least one layer",

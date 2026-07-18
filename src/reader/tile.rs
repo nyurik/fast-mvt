@@ -8,13 +8,12 @@ use crate::types::DEFAULT_EXTENT;
 use crate::{MvtError, MvtResult, MvtTile};
 
 impl Tile {
-    #[must_use]
-    pub fn from_reader(reader: &MvtReaderRef<'_>) -> Self {
-        let mut tile = reader.to_proto();
+    pub fn from_reader(reader: &MvtReaderRef<'_>) -> MvtResult<Self> {
+        let mut tile = reader.to_proto()?;
         for layer in &mut tile.layers {
             layer.extent.get_or_insert(DEFAULT_EXTENT.get());
         }
-        tile
+        Ok(tile)
     }
 }
 
@@ -56,9 +55,8 @@ impl<'a> MvtReaderRef<'a> {
         Ok(MvtTile { layers })
     }
 
-    #[must_use]
-    pub fn to_proto(&self) -> Tile {
-        self.0.to_owned_message()
+    pub fn to_proto(&self) -> MvtResult<Tile> {
+        Ok(self.0.to_owned_message()?)
     }
 }
 
