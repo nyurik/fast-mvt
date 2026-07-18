@@ -379,8 +379,13 @@ mod tests {
         feature.add_tag_uint("uint", 4);
         feature.add_tag_sint("sint", -5);
         feature.add_tag_bool("bool", true);
+        feature.add_tag_auto_int("auto_pos", 6_i32);
+        feature.add_tag_auto_int("auto_neg", -7_i16);
         assert_eq!(feature.id, Some(7));
-        assert_eq!(feature.num_tags(), 8);
+        assert_eq!(feature.num_tags(), 10);
+        // Non-negative -> UInt, negative -> SInt.
+        assert_eq!(feature.properties[8].1, MvtValue::UInt(6));
+        assert_eq!(feature.properties[9].1, MvtValue::SInt(-7));
 
         let mut layer = MvtLayer::new("places", DEFAULT_EXTENT);
         assert_eq!(layer.name(), "places");
