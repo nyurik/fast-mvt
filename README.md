@@ -9,9 +9,9 @@
 [![Codecov](https://img.shields.io/codecov/c/github/nyurik/fast-mvt)](https://app.codecov.io/gh/nyurik/fast-mvt)
 
 `fast-mvt` is an integer-only Mapbox Vector Tile reader and writer for Rust.
-Geometry uses `geo-types` with `i32` coordinates. The crate does not project,
+Geometry uses [`geo-types`](https://docs.rs/geo-types/latest/geo_types/) with `i32` coordinates. The crate does not project,
 scale, round, or handle floating point geometry coordinates; callers provide and
-receive tile-space integers.
+receive tile-space integers. See [`geo`](https://docs.rs/geo/latest/geo/) for the geometry manipulations you may need.
 
 ## Installation
 
@@ -56,52 +56,94 @@ fn read_tile(bytes: &[u8]) -> MvtResult<()> {
 
 ## Encoding a tile
 
-```rust
-use fast_mvt::{MvtGeometry, MvtResult, MvtTileBuilder};
+The simplest path starts a layer with `MvtLayerBuilder::new()`, adds features and
+their tags, and produces the tile bytes with `MvtLayerBuilder::encode()`. The
+builder is a consuming chain — each step returns the next builder and `end()`
+returns the parent — so a half-built layer or feature can never be used by
+accident.
 
-fn write_tile() -> MvtResult<Vec<u8>> {
-    let tile = MvtTileBuilder::new();
-    let layer = tile.layer("places")?;
+```rust
+use fast_mvt::{MvtGeometry, MvtLayerBuilder, MvtResult};
+
+fn create_tile() -> MvtResult<Vec<u8>> {
+    let layer = MvtLayerBuilder::new("places")?;
 
     let mut feature = layer.feature(&MvtGeometry::Point((1, 2).into()))?;
     feature.id(Some(7));
     feature.tag("name", "Example")?;
     feature.tag("visible", true)?;
-    let layer = feature.end();
 
-    let tile = layer.end();
-    Ok(tile.encode())
+    // `feature.end()` commits the feature and returns the layer;
+    // `layer.encode()` produces the final tile bytes.
+    Ok(feature.end().encode())
 }
 ```
 
-Opening a layer consumes the tile builder, and opening a feature consumes the
-layer builder. `end()` returns the parent builder with the child committed, so
-there is no reachable partially committed layer or tile while a child is in
-progress. `MvtTileBuilder::encode()` produces the final tile bytes. A single-layer tile byte buffer is also a framed layer chunk, so
-multiple independently built layer buffers can be concatenated to form a tile.
-
-## Parallel encoding
-
-Key and value deduplication is scoped to a single layer, so layers can be built
-completely independently — one per thread.
-`MvtLayerBuilder::new()` builds a standalone layer and `encode()` returns its
-framed bytes; concatenate the buffers (in whatever order you want the layers) to
-form the final tile.
+To add more layers, chain `MvtLayerBuilder::layer()`, which commits the current
+layer and opens the next one — without exposing the underlying tile builder:
 
 ```rust
 use fast_mvt::{MvtGeometry, MvtLayerBuilder, MvtResult};
 
-fn encode_tile(layers: &[(&str, MvtGeometry, &str)]) -> MvtResult<Vec<u8>> {
+fn create_tile() -> MvtResult<Vec<u8>> {
+    let mut feature = MvtLayerBuilder::new("roads")?
+        .feature(&MvtGeometry::Point((1, 2).into()))?;
+    feature.tag("kind", "residential")?;
+
+    let mut feature = feature.end().layer("water")?
+        .feature(&MvtGeometry::Point((3, 4).into()))?;
+    feature.tag("name", "Lake")?;
+
+    Ok(feature.end().encode())
+}
+```
+
+`MvtTileBuilder` is the underlying root, useful when you want a tile-first
+structure or need to preallocate. It nests tile → layer → feature and unwinds in
+reverse: `feature.end()` returns the layer, `layer.end()` returns the tile, then
+`tile.encode()` produces the bytes. The `with_capacity` constructors preallocate
+for a known number of layers or features:
+
+```rust
+use fast_mvt::{MvtGeometry, MvtResult, MvtTileBuilder};
+
+fn write_tile() -> MvtResult<Vec<u8>> {
+    let tile = MvtTileBuilder::with_capacity(1);
+    let layer = tile.layer_with_capacity("places", 1)?;
+
+    let mut feature = layer.feature(&MvtGeometry::Point((1, 2).into()))?;
+    feature.id(Some(7));
+    feature.tag("name", "Example")?;
+    feature.tag("visible", true)?;
+
+    Ok(feature.end().end().encode())
+}
+```
+
+## Parallel encoding
+
+Key and value deduplication is scoped to a single layer, so layers can be built
+completely independently. Each `MvtLayerBuilder::encode()` output is a framed
+layer chunk, and concatenating those chunks — in whatever order you want the
+layers — forms a complete tile. Per-layer parallelism is therefore
+straightforward: encode each layer on its own thread, then concatenate the
+buffers.
+
+```rust
+use fast_mvt::{MvtGeometry, MvtLayerBuilder, MvtResult};
+
+fn encode_layer(name: &str, geometry: &MvtGeometry) -> MvtResult<Vec<u8>> {
+    let feature = MvtLayerBuilder::new(name)?.feature(geometry)?;
+    Ok(feature.end().encode())
+}
+
+fn encode_tile(layers: &[(&str, MvtGeometry)]) -> MvtResult<Vec<u8>> {
     let buffers: Vec<Vec<u8>> = layers
         // This code is single-threaded, but it is easy to parallelize
         // with the `rayon` crate: swap `.iter()` for `.par_iter()` to encode
         // the layers in parallel.
         .iter()
-        .map(|(name, geom, prop)| {
-            let mut feature = MvtLayerBuilder::new(*name)?.feature(geom)?;
-            feature.tag("property", *prop)?;
-            Ok(feature.end().encode())
-        })
+        .map(|(name, geometry)| encode_layer(name, geometry))
         .collect::<MvtResult<_>>()?;
 
     // Concatenate the framed layer buffers, in order, into a tile.

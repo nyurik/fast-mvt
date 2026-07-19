@@ -177,6 +177,15 @@ impl MvtLayerBuilder {
         tile.push_layer(layer)
     }
 
+    /// Commit this layer and start a new one.
+    ///
+    /// This is a shortcut for `self.end().layer(name)` that keeps the chain on
+    /// layer builders without exposing the intermediate [`MvtTileBuilder`].
+    /// Returns [`MvtError::MissingLayerName`] if `name` is empty.
+    pub fn layer(self, name: impl Into<String>) -> MvtResult<Self> {
+        self.end().layer(name)
+    }
+
     /// Commit this layer and encode the tile built so far.
     ///
     /// For a builder created with [`MvtLayerBuilder::new`], the parent tile is
@@ -404,6 +413,36 @@ mod tests {
         let reader = MvtReaderRef::new(&tile).unwrap();
         let names: Vec<_> = reader.layers().map(|l| l.name().to_string()).collect();
         assert_eq!(names, ["roads", "water"]);
+    }
+
+    #[test]
+    #[cfg(feature = "reader")]
+    fn layer_builder_chains_to_next_layer() {
+        use crate::reader::MvtReaderRef;
+
+        // Chaining `.layer(..)` keeps the builder on the layer without exposing
+        // the tile, and produces the same tile as the explicit tile path.
+        let chained = MvtLayerBuilder::new("roads")
+            .unwrap()
+            .feature(&MvtGeometry::Point(point! { x: 1, y: 2 }))
+            .unwrap()
+            .end()
+            .layer("water")
+            .unwrap()
+            .feature(&MvtGeometry::Point(point! { x: 3, y: 4 }))
+            .unwrap()
+            .end()
+            .encode();
+
+        let reader = MvtReaderRef::new(&chained).unwrap();
+        let names: Vec<_> = reader.layers().map(|l| l.name().to_string()).collect();
+        assert_eq!(names, ["roads", "water"]);
+    }
+
+    #[test]
+    fn layer_builder_chain_rejects_empty_name() {
+        let layer = MvtLayerBuilder::new("roads").unwrap();
+        assert!(matches!(layer.layer(""), Err(MvtError::MissingLayerName)));
     }
 
     #[test]
