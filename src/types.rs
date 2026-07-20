@@ -5,6 +5,7 @@ use geo_types::{
     Coord, Geometry, LineString, MultiLineString, MultiPoint, MultiPolygon, Point, Polygon,
 };
 
+#[cfg(feature = "writer")]
 use crate::MvtResult;
 
 pub type MvtExtent = NonZeroU32;

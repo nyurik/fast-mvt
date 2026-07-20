@@ -197,15 +197,25 @@ assert-cmd command:
         exit 1 ;\
     fi
 
-# Make sure the git repo has no uncommitted changes
+# Make sure the git repo has no uncommitted changes. Fails if CI envvar is set.
 [private]
 assert-git-is-clean:
-    @if [ -n "$(git status --untracked-files --porcelain)" ]; then \
-        >&2 echo "ERROR: git repo is no longer clean. Make sure compilation and tests artifacts are in the .gitignore, and no repo files are modified." ;\
-        >&2 echo "######### git status ##########" ;\
-        git status ;\
-        git --no-pager diff ;\
-        exit 1 ;\
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
+        >&2 echo "::error::git repo is not clean. Make sure compilation and tests artifacts are in the .gitignore, and no repo files are modified."
+        if [[ "{{ci_mode}}" == "1" ]]; then
+            >&2 echo "::group::git status"
+            git status
+            >&2 echo "::endgroup::"
+            >&2 echo "::group::git diff (tracked changes)"
+            git add . --intent-to-add
+            git --no-pager diff
+            >&2 echo "::endgroup::"
+            exit 1
+        else
+            >&2 echo "git repo is not clean, but not failing because CI mode is not enabled."
+        fi
     fi
 
 # Check if a certain Cargo command is installed, and install it if needed
