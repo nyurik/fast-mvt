@@ -312,45 +312,46 @@ mod tests {
     use crate::MvtGeometry;
 
     #[test]
-    fn layer_builder_deduplicates_keys_and_values() {
-        let layer = MvtTileBuilder::new().layer("layer").unwrap();
+    fn layer_builder_deduplicates_keys_and_values() -> MvtResult<()> {
+        let layer = MvtTileBuilder::new().layer("layer")?;
         let mut feature = layer
             .feature(&MvtGeometry::Point(point! { x: 1, y: 2 }))
-            .unwrap();
-        feature.tag("foo", MvtValue::String("bar".into())).unwrap();
-        feature.tag("foo", MvtValue::String("baz".into())).unwrap();
-        feature.tag("bar", MvtValue::String("bar".into())).unwrap();
-        feature.tag("n", MvtValue::Int(1)).unwrap();
-        feature.tag("n", MvtValue::SInt(1)).unwrap();
-        feature.tag("f", MvtValue::Float(f32::NAN)).unwrap();
-        feature.tag("f", MvtValue::Float(f32::NAN)).unwrap();
+            ?;
+        feature.tag("foo", MvtValue::String("bar".into()))?;
+        feature.tag("foo", MvtValue::String("baz".into()))?;
+        feature.tag("bar", MvtValue::String("bar".into()))?;
+        feature.tag("n", MvtValue::Int(1))?;
+        feature.tag("n", MvtValue::SInt(1))?;
+        feature.tag("f", MvtValue::Float(f32::NAN))?;
+        feature.tag("f", MvtValue::Float(f32::NAN))?;
 
         assert_eq!(
             feature.feature.tags,
             vec![0, 0, 0, 1, 1, 0, 2, 2, 2, 3, 3, 4, 3, 4]
         );
+        Ok(())
     }
 
     #[test]
-    fn encode_appends_and_validates_tile_metadata() {
+    fn encode_appends_and_validates_tile_metadata() -> MvtResult<()> {
         let tile = MvtTileBuilder::new();
-        let layer = tile.layer("layer").unwrap();
+        let layer = tile.layer("layer")?;
         let mut feature = layer
             .feature(&MvtGeometry::Point(point! { x: 1, y: 2 }))
-            .unwrap();
+            ?;
         feature.id(Some(1));
-        feature.tag("skip", MvtValue::Null).unwrap();
+        feature.tag("skip", MvtValue::Null)?;
         let layer = feature.end();
         let bytes = layer.end().encode();
-        let proto = Tile::decode_from_slice(&bytes).unwrap();
+        let proto = Tile::decode_from_slice(&bytes)?;
         assert!(proto.layers[0].keys.is_empty());
         assert!(proto.layers[0].features[0].tags.is_empty());
 
         let tile = MvtTileBuilder::new();
-        let layer = tile.layer("layer").unwrap();
+        let layer = tile.layer("layer")?;
         let mut feature = layer
             .feature(&MvtGeometry::Point(point! { x: 1, y: 2 }))
-            .unwrap();
+            ?;
         feature.id(Some(1));
         let layer = feature.end();
         let tile = layer.end();
@@ -359,13 +360,15 @@ mod tests {
         assert_eq!(out[0], 0xaa);
 
         let tile = MvtTileBuilder::new();
-        let tile = tile.layer("same").unwrap().end();
-        let tile = tile.layer("same").unwrap().end();
+        let tile = tile.layer("same")?.end();
+        let tile = tile.layer("same")?.end();
         assert!(!tile.encode().is_empty());
+
+        Ok(())
     }
 
     #[test]
-    fn encode_ref_matches_owned_encode() {
+    fn encode_ref_matches_owned_encode() -> MvtResult<()> {
         let mut feature = crate::MvtFeature::new(MvtGeometry::Point(point! { x: 1, y: 2 }));
         feature.set_id(7);
         feature.add_tag_string("name", "Example");
@@ -378,75 +381,78 @@ mod tests {
         tile.add_layer(layer);
 
         assert_eq!(
-            encode_tile(tile.clone()).unwrap(),
-            encode_tile_ref(&tile).unwrap()
+            encode_tile(tile.clone())?,
+            encode_tile_ref(&tile)?
         );
+
+        Ok(())
     }
 
     #[test]
     #[cfg(feature = "reader")]
-    fn standalone_layer_encode_matches_tile_path_and_concatenates() {
+    fn standalone_layer_encode_matches_tile_path_and_concatenates() -> MvtResult<()> {
         use crate::reader::MvtReaderRef;
 
         let build = |name| {
             let mut feature = MvtLayerBuilder::new(name)
-                .unwrap()
+                ?
                 .feature(&MvtGeometry::Point(point! { x: 1, y: 2 }))
-                .unwrap();
-            feature.tag("k", MvtValue::UInt(1)).unwrap();
+                ?;
+            feature.tag("k", MvtValue::UInt(1))?;
             feature.end().encode()
         };
 
         // A standalone layer buffer equals the same layer built via the tile path.
         let via_tile = MvtTileBuilder::new()
-            .layer("roads")
-            .unwrap()
+            .layer("roads")?
             .feature(&MvtGeometry::Point(point! { x: 1, y: 2 }))
-            .unwrap();
+            ?;
         let mut via_tile = via_tile;
-        via_tile.tag("k", MvtValue::UInt(1)).unwrap();
+        via_tile.tag("k", MvtValue::UInt(1))?;
         let via_tile = via_tile.end().end().encode();
         assert_eq!(build("roads"), via_tile);
 
         // Concatenated layer buffers form a valid multi-layer tile.
         let tile = [build("roads"), build("water")].concat();
-        let reader = MvtReaderRef::new(&tile).unwrap();
+        let reader = MvtReaderRef::new(&tile)?;
         let names: Vec<_> = reader.layers().map(|l| l.name().to_string()).collect();
         assert_eq!(names, ["roads", "water"]);
+        Ok(())
     }
 
     #[test]
     #[cfg(feature = "reader")]
-    fn layer_builder_chains_to_next_layer() {
+    fn layer_builder_chains_to_next_layer() -> MvtResult<()> {
         use crate::reader::MvtReaderRef;
 
         // Chaining `.layer(..)` keeps the builder on the layer without exposing
         // the tile, and produces the same tile as the explicit tile path.
         let chained = MvtLayerBuilder::new("roads")
-            .unwrap()
+            ?
             .feature(&MvtGeometry::Point(point! { x: 1, y: 2 }))
-            .unwrap()
+            ?
             .end()
-            .layer("water")
-            .unwrap()
+            .layer("water")?
             .feature(&MvtGeometry::Point(point! { x: 3, y: 4 }))
-            .unwrap()
+            ?
             .end()
             .encode();
 
-        let reader = MvtReaderRef::new(&chained).unwrap();
+        let reader = MvtReaderRef::new(&chained)?;
         let names: Vec<_> = reader.layers().map(|l| l.name().to_string()).collect();
         assert_eq!(names, ["roads", "water"]);
+        Ok(())
     }
 
     #[test]
-    fn layer_builder_chain_rejects_empty_name() {
-        let layer = MvtLayerBuilder::new("roads").unwrap();
+    fn layer_builder_chain_rejects_empty_name() -> MvtResult<()> {
+        let layer = MvtLayerBuilder::new("roads")?;
         assert!(matches!(layer.layer(""), Err(MvtError::MissingLayerName)));
+        Ok(())
     }
 
     #[test]
-    fn standalone_layer_builder_rejects_empty_name() {
+    fn standalone_layer_builder_rejects_empty_name() -> MvtResult<()> {
         assert!(matches!(
             MvtLayerBuilder::new(""),
             Err(MvtError::MissingLayerName)
@@ -455,10 +461,11 @@ mod tests {
             MvtLayerBuilder::with_capacity("", 1),
             Err(MvtError::MissingLayerName)
         ));
+        Ok(())
     }
 
     #[test]
-    fn layer_builder_rejects_empty_name() {
+    fn layer_builder_rejects_empty_name() -> MvtResult<()> {
         assert!(matches!(
             MvtTileBuilder::new().layer(""),
             Err(MvtError::MissingLayerName)
@@ -467,49 +474,48 @@ mod tests {
             MvtTileBuilder::new().layer_with_capacity("", 1),
             Err(MvtError::MissingLayerName)
         ));
+        Ok(())
     }
 
     #[test]
-    fn builder_encoded_len_matches_encoded_bytes() {
+    fn builder_encoded_len_matches_encoded_bytes() -> MvtResult<()> {
         let builder = MvtTileBuilder::new()
-            .layer("l")
-            .unwrap()
+            .layer("l")?
             .feature(&MvtGeometry::Point(point! { x: 1, y: 2 }))
-            .unwrap()
+            ?
             .end()
             .end();
         let len = builder.encoded_len();
         assert_eq!(len, builder.encode().len());
+        Ok(())
     }
 
     #[test]
-    fn layer_builder_accepts_feature_capacity() {
-        let layer = MvtTileBuilder::new()
-            .layer_with_capacity("layer", 2)
-            .unwrap();
-
+    fn layer_builder_accepts_feature_capacity() -> MvtResult<()> {
+        let layer = MvtTileBuilder::new().layer_with_capacity("layer", 2)?;
         assert_eq!(layer.layer.features.capacity(), 2);
+        Ok(())
     }
 
     #[test]
     #[cfg(feature = "reader")]
-    fn tag_auto_int_round_trips_through_reader() {
+    fn tag_auto_int_round_trips_through_reader() -> MvtResult<()> {
         use crate::reader::{MvtReaderRef, MvtValueRef};
 
         let tile = MvtTileBuilder::new();
-        let layer = tile.layer("l").unwrap();
+        let layer = tile.layer("l")?;
         let mut feature = layer
             .feature(&MvtGeometry::Point(point! { x: 1, y: 2 }))
-            .unwrap();
-        feature.tag_auto_int("pos", 100_i32).unwrap();
-        feature.tag_auto_int("neg", -100_i16).unwrap();
-        feature.tag_auto_int("zero", 0_i64).unwrap();
+            ?;
+        feature.tag_auto_int("pos", 100_i32)?;
+        feature.tag_auto_int("neg", -100_i16)?;
+        feature.tag_auto_int("zero", 0_i64)?;
         let bytes = feature.end().end().encode();
 
-        let reader = MvtReaderRef::new(&bytes).unwrap();
-        let layer = reader.layers().next().unwrap();
-        let feature = layer.features().next().unwrap();
-        let props = feature.properties_vec().unwrap();
+        let reader = MvtReaderRef::new(&bytes)?;
+        let layer = reader.layers().next()?;
+        let feature = layer.features().next()?;
+        let props = feature.properties_vec()?;
 
         // Non-negative -> UInt, negative -> SInt.
         assert_eq!(props[0].0, "pos");
@@ -518,10 +524,11 @@ mod tests {
         assert_eq!(props[1].1, MvtValueRef::SInt(-100));
         assert_eq!(props[2].0, "zero");
         assert_eq!(props[2].1, MvtValueRef::UInt(0));
+        Ok(())
     }
 
     #[test]
-    fn auto_int_is_never_larger_than_int_or_sint() {
+    fn auto_int_is_never_larger_than_int_or_sint() -> MvtResult<()> {
         for v in [
             0_i64,
             1,
@@ -541,10 +548,11 @@ mod tests {
             assert!(auto <= int, "v={v}: auto {auto} > int {int}");
             assert!(auto <= sint, "v={v}: auto {auto} > sint {sint}");
         }
+        Ok(())
     }
 
     #[test]
-    fn value_to_proto_handles_all_variants() {
+    fn value_to_proto_handles_all_variants() -> MvtResult<()> {
         assert_eq!(
             value_to_proto(MvtValue::String("x".into()))
                 .string_value
@@ -561,5 +569,6 @@ mod tests {
         assert_eq!(value_to_proto(MvtValue::SInt(-5)).sint_value, Some(-5));
         assert_eq!(value_to_proto(MvtValue::Bool(true)).bool_value, Some(true));
         assert_eq!(value_to_proto(MvtValue::Null), Value::default());
+        Ok(())
     }
 }

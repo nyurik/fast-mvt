@@ -5,6 +5,8 @@ use geo_types::{
     Coord, Geometry, LineString, MultiLineString, MultiPoint, MultiPolygon, Point, Polygon,
 };
 
+use crate::MvtResult;
+
 pub type MvtExtent = NonZeroU32;
 pub type MvtCoord = Coord<i32>;
 pub type MvtPoint = Point<i32>;
@@ -47,12 +49,12 @@ impl MvtTile {
     }
 
     #[cfg(feature = "writer")]
-    pub fn encode(self) -> crate::MvtResult<Vec<u8>> {
+    pub fn encode(self) -> MvtResult<Vec<u8>> {
         crate::writer::encode_tile(self)
     }
 
     #[cfg(feature = "writer")]
-    pub fn encode_ref(&self) -> crate::MvtResult<Vec<u8>> {
+    pub fn encode_ref(&self) -> MvtResult<Vec<u8>> {
         crate::writer::encode_tile_ref(self)
     }
 }
@@ -365,7 +367,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn owned_tile_layer_and_feature_helpers_mutate_expected_fields() {
+    fn owned_tile_layer_and_feature_helpers_mutate_expected_fields()  {
         let mut feature = MvtFeature::new(MvtGeometry::Point(point! { x: 1, y: 2 }));
         assert_eq!(feature.id, None);
         assert_eq!(feature.num_tags(), 0);
@@ -400,7 +402,7 @@ mod tests {
     }
 
     #[test]
-    fn mvt_value_from_impls_preserve_variant_intent() {
+    fn mvt_value_from_impls_preserve_variant_intent() -> MvtResult<()> {
         assert_eq!(
             MvtValue::from(String::from("owned")),
             MvtValue::String("owned".into())
@@ -424,10 +426,11 @@ mod tests {
         assert_eq!(MvtValue::from(9_u16), MvtValue::UInt(9));
         assert_eq!(MvtValue::from(10_u8), MvtValue::UInt(10));
         assert_eq!(MvtValue::from(true), MvtValue::Bool(true));
+        Ok(())
     }
 
     #[test]
-    fn auto_int_picks_smallest_encoding() {
+    fn auto_int_picks_smallest_encoding() -> MvtResult<()> {
         // Non-negative -> UInt (plain varint); negative -> SInt (zig-zag varint).
         assert_eq!(MvtValue::auto_int(0_i64), MvtValue::UInt(0));
         assert_eq!(MvtValue::auto_int(100_i64), MvtValue::UInt(100));
@@ -441,10 +444,11 @@ mod tests {
         assert_eq!(MvtValue::auto_int(-5_i16), MvtValue::SInt(-5));
         assert_eq!(MvtValue::auto_int(-4_i32), MvtValue::SInt(-4));
         assert_eq!(MvtValue::auto_int(7_i32), MvtValue::UInt(7));
+        Ok(())
     }
 
     #[test]
-    fn mvt_value_equality_and_hash_include_variant_and_float_bits() {
+    fn mvt_value_equality_and_hash_include_variant_and_float_bits() -> MvtResult<()> {
         fn hash(value: &MvtValue) -> u64 {
             let mut hasher = std::collections::hash_map::DefaultHasher::new();
             value.hash(&mut hasher);
@@ -460,6 +464,7 @@ mod tests {
         );
         assert_ne!(hash(&MvtValue::Int(1)), hash(&MvtValue::SInt(1)));
         assert_eq!(hash(&MvtValue::Null), hash(&MvtValue::Null));
+        Ok(())
     }
 }
 
@@ -471,7 +476,7 @@ mod tests_json {
     use crate::generated::vector_tile::Tile;
 
     #[test]
-    fn mvt_values_convert_to_json_values() {
+    fn mvt_values_convert_to_json_values() -> MvtResult<()> {
         assert_eq!(
             serde_json::Value::try_from(MvtValue::String("name".into())),
             Ok(json!("name"))
@@ -501,10 +506,11 @@ mod tests_json {
             serde_json::Value::try_from(MvtValue::Double(f64::NAN)),
             Err(MvtJsonValueError::NonFiniteFloat)
         );
+        Ok(())
     }
 
     #[test]
-    fn json_values_convert_to_mvt_values() {
+    fn json_values_convert_to_mvt_values() -> MvtResult<()> {
         assert_eq!(
             MvtValue::try_from(json!("name")),
             Ok(MvtValue::String("name".into()))
@@ -528,10 +534,11 @@ mod tests_json {
             MvtValue::try_from(json!({})),
             Err(MvtJsonValueError::UnsupportedJsonObject)
         );
+        Ok(())
     }
 
     #[test]
-    fn tile_deserializes_from_object_but_not_layers_array() {
+    fn tile_deserializes_from_object_but_not_layers_array()  {
         let object: Tile = serde_json::from_str(
             r#"{
                 "layers": [{
