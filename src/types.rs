@@ -5,6 +5,9 @@ use geo_types::{
     Coord, Geometry, LineString, MultiLineString, MultiPoint, MultiPolygon, Point, Polygon,
 };
 
+#[cfg(feature = "writer")]
+use crate::MvtResult;
+
 pub type MvtExtent = NonZeroU32;
 pub type MvtCoord = Coord<i32>;
 pub type MvtPoint = Point<i32>;
@@ -47,12 +50,12 @@ impl MvtTile {
     }
 
     #[cfg(feature = "writer")]
-    pub fn encode(self) -> crate::MvtResult<Vec<u8>> {
+    pub fn encode(self) -> MvtResult<Vec<u8>> {
         crate::writer::encode_tile(self)
     }
 
     #[cfg(feature = "writer")]
-    pub fn encode_ref(&self) -> crate::MvtResult<Vec<u8>> {
+    pub fn encode_ref(&self) -> MvtResult<Vec<u8>> {
         crate::writer::encode_tile_ref(self)
     }
 }

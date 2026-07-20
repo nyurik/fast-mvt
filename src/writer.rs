@@ -177,6 +177,15 @@ impl MvtLayerBuilder {
         tile.push_layer(layer)
     }
 
+    /// Commit this layer and start a new one.
+    ///
+    /// This is a shortcut for `self.end().layer(name)` that keeps the chain on
+    /// layer builders without exposing the intermediate [`MvtTileBuilder`].
+    /// Returns [`MvtError::MissingLayerName`] if `name` is empty.
+    pub fn layer(self, name: impl Into<String>) -> MvtResult<Self> {
+        self.end().layer(name)
+    }
+
     /// Commit this layer and encode the tile built so far.
     ///
     /// For a builder created with [`MvtLayerBuilder::new`], the parent tile is
@@ -297,6 +306,8 @@ fn u32_index(value: usize) -> MvtResult<u32> {
 
 #[cfg(test)]
 mod tests {
+    #![expect(clippy::panic_in_result_fn)]
+
     use geo_types::point;
 
     use super::*;
@@ -379,13 +390,11 @@ mod tests {
     fn standalone_layer_encode_matches_tile_path_and_concatenates() {
         use crate::reader::MvtReaderRef;
 
-        let build = |name| {
-            let mut feature = MvtLayerBuilder::new(name)
-                .unwrap()
-                .feature(&MvtGeometry::Point(point! { x: 1, y: 2 }))
-                .unwrap();
-            feature.tag("k", MvtValue::UInt(1)).unwrap();
-            feature.end().encode()
+        let build = |name| -> MvtResult<Vec<u8>> {
+            let mut feature =
+                MvtLayerBuilder::new(name)?.feature(&MvtGeometry::Point(point! { x: 1, y: 2 }))?;
+            feature.tag("k", MvtValue::UInt(1))?;
+            Ok(feature.end().encode())
         };
 
         // A standalone layer buffer equals the same layer built via the tile path.
@@ -397,13 +406,40 @@ mod tests {
         let mut via_tile = via_tile;
         via_tile.tag("k", MvtValue::UInt(1)).unwrap();
         let via_tile = via_tile.end().end().encode();
-        assert_eq!(build("roads"), via_tile);
+        assert_eq!(build("roads").unwrap(), via_tile);
 
         // Concatenated layer buffers form a valid multi-layer tile.
-        let tile = [build("roads"), build("water")].concat();
+        let tile = [build("roads").unwrap(), build("water").unwrap()].concat();
         let reader = MvtReaderRef::new(&tile).unwrap();
         let names: Vec<_> = reader.layers().map(|l| l.name().to_string()).collect();
         assert_eq!(names, ["roads", "water"]);
+    }
+
+    #[test]
+    #[cfg(feature = "reader")]
+    fn layer_builder_chains_to_next_layer() -> MvtResult<()> {
+        use crate::reader::MvtReaderRef;
+
+        // Chaining `.layer(..)` keeps the builder on the layer without exposing
+        // the tile, and produces the same tile as the explicit tile path.
+        let chained = MvtLayerBuilder::new("roads")?
+            .feature(&MvtGeometry::Point(point! { x: 1, y: 2 }))?
+            .end()
+            .layer("water")?
+            .feature(&MvtGeometry::Point(point! { x: 3, y: 4 }))?
+            .end()
+            .encode();
+
+        let reader = MvtReaderRef::new(&chained)?;
+        let names: Vec<_> = reader.layers().map(|l| l.name().to_string()).collect();
+        assert_eq!(names, ["roads", "water"]);
+        Ok(())
+    }
+
+    #[test]
+    fn layer_builder_chain_rejects_empty_name() {
+        let layer = MvtLayerBuilder::new("roads").unwrap();
+        assert!(matches!(layer.layer(""), Err(MvtError::MissingLayerName)));
     }
 
     #[test]
@@ -448,7 +484,6 @@ mod tests {
         let layer = MvtTileBuilder::new()
             .layer_with_capacity("layer", 2)
             .unwrap();
-
         assert_eq!(layer.layer.features.capacity(), 2);
     }
 
