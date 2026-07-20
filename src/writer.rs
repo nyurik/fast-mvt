@@ -306,6 +306,8 @@ fn u32_index(value: usize) -> MvtResult<u32> {
 
 #[cfg(test)]
 mod tests {
+    #![expect(clippy::panic_in_result_fn)]
+
     use geo_types::point;
 
     use super::*;
