@@ -120,9 +120,9 @@ checksum = "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da"
 
 [[package]]
 name = "buffa"
-version = "0.9.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b97ce1f34252b8e2516042e1002d56c160908a7ff8a1c9d47e97836558d1c83a"
+checksum = "cf9e6224bc4ee1f189ad257120c156fb05f95b826f5369d620b24984476c200a"
 dependencies = [
  "arbitrary",
  "base64",
@@ -139,9 +139,9 @@ dependencies = [
 
 [[package]]
 name = "buffa-build"
-version = "0.9.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbcfe99b1fc17c2ba15b99de057667da0fa2e7825c6a9f454fd9244dfcf5d171"
+checksum = "247d43740a4854a9c1b98a5931d6d67d8f8b41ffeb2a43ca008d460e79b1eb2c"
 dependencies = [
  "buffa",
  "buffa-codegen",
@@ -150,9 +150,9 @@ dependencies = [
 
 [[package]]
 name = "buffa-codegen"
-version = "0.9.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ccb7d9d432a6b8d1810089cf6779e5f8ae640b421502ab96771c2eb20ccb85c2"
+checksum = "2074a9c2f76b2ebe6af40f7bf67b6a19d6ce3663253ef2a55124dc93f38b230e"
 dependencies = [
  "buffa",
  "buffa-descriptor",
@@ -165,9 +165,9 @@ dependencies = [
 
 [[package]]
 name = "buffa-descriptor"
-version = "0.9.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3865eb96d1d2fe968f077752c47fb192cb2ce02262dcb90b37948ea93f673f2"
+checksum = "964d735e0b06cb24fa15a68c5aa99549abcc7e0bbeb76298f2fec57912fb79c1"
 dependencies = [
  "buffa",
  "rustversion",
@@ -238,9 +238,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.6.2"
+version = "4.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd059f9da4f5c36b3787f65d38ccaab1cc315f07b01f89abc8359ee6a8205011"
+checksum = "0fb99565819980999fb7b4a1796046a5c949e6d4ff132cf5fadf5a641e20d776"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -260,9 +260,9 @@ dependencies = [
 
 [[package]]
 name = "clap_derive"
-version = "4.6.1"
+version = "4.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2ce8604710f6733aa641a2b3731eaa1e8b3d9973d5e3565da11800813f997a9"
+checksum = "32f2392eae7f16557a3d727ef3a12e57b2b2ca6f98566a5f4fb41ffe305df077"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -974,9 +974,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.150"
+version = "1.0.151"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8014e44b4736ed0538adeecded0fce2a272f22dc9578a7eb6b2d9993c74cfb9"
+checksum = "c841b55ecdae098c80dcae9cf767f6f8a0c2cdb3416bbef72181df4d0fe73f14"
 dependencies = [
  "itoa",
  "memchr",
