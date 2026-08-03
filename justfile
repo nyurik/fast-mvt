@@ -7,6 +7,8 @@ just := quote(just_executable())
 binstall_args := if env('CI', '') != '' {'--no-confirm --no-track --disable-telemetry'} else {''}
 # location of the coverage output, used by CI
 coverage_lcov := 'target/llvm-cov/lcov.info'
+# All targets except benches (running gungraun benches needs Valgrind; see `bench-cpu`/`bench-check`).
+non_bench_targets := '--lib --bins --tests --examples'
 
 # if running in CI, treat warnings as errors by setting CARGO_BUILD_WARNINGS to 'deny' unless it is already set
 # Use `CI=true just ci-test` to run the same tests as in GitHub CI.
@@ -26,27 +28,31 @@ bless *args:  (cargo-install 'cargo-insta')
 build:
     cargo build --workspace --all-features --all-targets
 
-# Run full Criterion benchmarks
+# Run the wall-clock (criterion) benchmarks comparing fast-mvt to mvt / mvt-reader / tinymvt
 bench: bench-decode bench-encode
 
-# Compare decoding speed between fast-mvt and mvt-reader
+# Compare decoding speed between fast-mvt, mvt-reader, and tinymvt (criterion, wall-clock)
 bench-decode:
     cargo bench --bench decoder
 
-# Compare encoding speed between fast-mvt and mvt
+# Compare encoding speed between fast-mvt, mvt, and tinymvt (criterion, wall-clock)
 bench-encode:
     cargo bench --bench encoder
 
-# Compile and smoke-test benchmarks quickly, suitable for CI
-bench-quick: bench-decode-quick bench-encode-quick
+# CPU-instruction-count (gungraun/Valgrind) benchmarks, same code as `bench`; needs valgrind + gungraun-runner
+bench-cpu filter='': (bench-cpu-decode filter) (bench-cpu-encode filter)
 
-# Compile and smoke-test the decode benchmark quickly, suitable for CI
-bench-decode-quick:
-    cargo bench --bench decoder -- --test
+# CPU-instruction-count decode comparison (gungraun/Valgrind)
+bench-cpu-decode filter='':
+    cargo bench --bench decoder_cpu {{ if filter != '' { "-- '*" + filter + "*'" } else { '' } }}
 
-# Compile and smoke-test the encode benchmark quickly, suitable for CI
-bench-encode-quick:
-    cargo bench --bench encoder -- --test
+# CPU-instruction-count encode comparison (gungraun/Valgrind)
+bench-cpu-encode filter='':
+    cargo bench --bench encoder_cpu {{ if filter != '' { "-- '*" + filter + "*'" } else { '' } }}
+
+# Compile-check all benchmarks without running them (no Valgrind needed), suitable for CI
+bench-check:
+    cargo bench --no-run --workspace --all-features
 
 # Quick compile without building a binary
 check:
@@ -63,7 +69,7 @@ ci-coverage: env-info && \
     mkdir -p {{quote(parent_directory(coverage_lcov))}}
 
 # Run all tests as expected by CI
-ci-test: env-info codegen-check test-fmt clippy test-feature-matrix bench-quick test-doc && assert-git-is-clean
+ci-test: env-info codegen-check test-fmt clippy test-feature-matrix bench-check test-doc && assert-git-is-clean
 
 # Compile default features with minimal dependencies on the configured MSRV
 ci-test-msrv:
@@ -89,7 +95,7 @@ coverage:  (_coverage '--open')
 # Clean, collect, and aggregate coverage using the requested report arguments
 _coverage *report_args:  (cargo-install 'cargo-llvm-cov')
     cargo llvm-cov clean --workspace
-    cargo llvm-cov --no-report --workspace --all-features --all-targets
+    cargo llvm-cov --no-report --workspace --all-features {{non_bench_targets}}
     cargo llvm-cov report --include-build-script --ignore-filename-regex 'src/generated/' {{report_args}}
 
 # Build and open code documentation
@@ -162,7 +168,7 @@ semver *args:  (cargo-install 'cargo-semver-checks')
 
 # Run all tests
 test:
-    cargo test --workspace --all-features --all-targets
+    cargo test --workspace --all-features {{non_bench_targets}}
     cargo test --doc --workspace --all-features
 
 # Run tests with every supported feature combination

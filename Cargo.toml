@@ -20,13 +20,25 @@ required-features = ["cli"]
 name = "profile_decoder"
 required-features = ["reader"]
 
+# Wall-clock (criterion) benchmarks; `*_cpu` are the deterministic CPU-instruction-count (gungraun)
+# variants that run the same measured code. See benches/common/{encode,decode}.rs.
 [[bench]]
 name = "decoder"
 harness = false
 required-features = ["reader", "writer"]
 
 [[bench]]
+name = "decoder_cpu"
+harness = false
+required-features = ["reader", "writer"]
+
+[[bench]]
 name = "encoder"
+harness = false
+required-features = ["reader", "writer"]
+
+[[bench]]
+name = "encoder_cpu"
 harness = false
 required-features = ["reader", "writer"]
 
@@ -56,6 +68,7 @@ buffa-build = { version = "0.9.0", optional = true }
 [dev-dependencies]
 anyhow = "1"
 criterion = { version = "0.8", features = ["html_reports"] }
+gungraun = "0.19"
 insta = "1.43"
 mvt = "0.14.0"
 mvt-reader = "2.3.0"
@@ -63,6 +76,10 @@ prost = "0.14.3"
 tempfile = "3.27.0"
 test_each_file = "0.3.5"
 tinymvt = "0.3.0"
+
+# gungraun (Valgrind/Callgrind) benchmarks need debug info to map instruction counts to source.
+[profile.bench]
+debug = true
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }

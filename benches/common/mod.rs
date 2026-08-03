@@ -1,6 +1,10 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+// Harness-agnostic benchmark logic, shared verbatim by the criterion and gungraun bench binaries.
+pub mod decode;
+pub mod encode;
+
 type MvtPath = (u64, PathBuf);
 
 #[allow(dead_code)]
@@ -31,8 +35,9 @@ pub fn load_repo_mvt_files(allow_large: bool) -> Vec<BenchTile> {
             (bytes, data)
         })
         // All benchmarked decoders must be able to traverse the same tile set.
-        // Filter out fixtures that mvt-reader cannot inspect before Criterion
-        // starts measuring, so its benchmark does not panic mid-run.
+        // Filter out fixtures that mvt-reader cannot inspect up front (both
+        // harnesses load tiles before measuring), so its benchmark cannot panic
+        // mid-measurement.
         .filter(|(_, data)| {
             mvt_reader::Reader::new(data.clone())
                 .and_then(|reader| reader.get_layer_metadata().map(|_| ()))
