@@ -1,0 +1,68 @@
+name: Gungraun Comment
+
+# Runs after "Gungraun Bench" finishes, downloads its metrics artifact, and posts (or updates) a single
+# PR comment with the encode/decode benchmarks' CPU instruction counts. Split from the bench job so it
+# can hold a write token without exposing it to untrusted fork PR code. Purely informational — it posts,
+# it never fails the PR.
+
+on:
+  workflow_run:
+    workflows: [ 'Gungraun Bench' ]
+    types: [ completed ]
+
+permissions: { contents: read, pull-requests: write }
+
+defaults:
+  run: { shell: bash }
+
+env:
+  COMMENT_MARKER: '<!-- gungraun-comment -->'
+
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: gungraun-metrics
+          path: /tmp/metrics/
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Compose comment
+        run: |
+          set -euo pipefail
+          cat > /tmp/comment.md <<'EOF'
+          ## fast-mvt encode/decode — CPU instruction counts
+
+          fast-mvt's own encode/decode instruction counts, measured by [gungraun](https://docs.rs/gungraun) under Valgrind/Callgrind — one-shot and deterministic, so these are exact (the `mvt`/`mvt-reader`/`tinymvt` comparison cases run only locally via `just bench-cpu`, not in CI). A diff vs. the PR base appears once the base branch also carries the gungraun bench. Informational only; this never fails CI.
+
+          <details><summary>Results</summary>
+
+          ```
+          EOF
+          cat /tmp/metrics/head.log >> /tmp/comment.md 2>/dev/null \
+            || echo "no gungraun output was captured" >> /tmp/comment.md
+          cat >> /tmp/comment.md <<'EOF'
+          ```
+
+          </details>
+
+          EOF
+          echo "$COMMENT_MARKER" >> /tmp/comment.md
+
+      - name: Post or update PR comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.event.workflow_run.repository.full_name }}
+        run: |
+          set -euo pipefail
+          PR_NUMBER=$(cat /tmp/metrics/pr_number.txt)
+          EXISTING=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --paginate \
+            --jq ".[] | select(.body | contains(\"$COMMENT_MARKER\")) | .id" | head -n1)
+          if [ -n "$EXISTING" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$EXISTING" -F body=@/tmp/comment.md
+          else
+            gh api -X POST "repos/$REPO/issues/$PR_NUMBER/comments" -F body=@/tmp/comment.md
+          fi
