@@ -85,7 +85,7 @@ mod tests {
     use crate::MvtValue;
     use crate::generated::vector_tile::tile as proto_tile;
     use crate::reader::MvtValueRef;
-    use crate::reader::tests::{encode_layer, first_feature};
+    use crate::reader::tests::{encode_feature, encode_layer, first_feature};
 
     #[test]
     fn borrowed_api_reads_accessors_properties_and_repeated_points() {
@@ -213,13 +213,12 @@ mod tests {
             geometry: vec![9, 0, 0],
             ..Default::default()
         };
-        let mut layer = proto_tile::Layer {
+        let layer = proto_tile::Layer {
             version: 2,
             name: "geometry".into(),
             ..Default::default()
         };
-        layer.features = vec![feature];
-        let bytes = encode_layer(layer);
+        let bytes = encode_feature(layer, feature);
         let reader = MvtReaderRef::new(&bytes).unwrap();
         let feature = first_feature(&reader);
         assert!(matches!(feature.geometry(), Err(MvtError::InvalidGeometry)));

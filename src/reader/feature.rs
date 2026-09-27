@@ -172,7 +172,7 @@ mod tests {
     use geo_types::{Geometry, MultiLineString, MultiPoint, MultiPolygon};
 
     use super::*;
-    use crate::reader::tests::{encode_layer, first_feature};
+    use crate::reader::tests::{encode_feature, encode_layer, first_feature};
     use crate::{MvtError, MvtReaderRef};
 
     #[test]
@@ -203,9 +203,7 @@ mod tests {
                 geometry: vec![],
                 ..Default::default()
             };
-            let mut layer = layer.clone();
-            layer.features = vec![feature];
-            let bytes = encode_layer(layer);
+            let bytes = encode_feature(layer.clone(), feature);
             let reader = MvtReaderRef::new(&bytes).unwrap();
             let feature = first_feature(&reader);
             assert_eq!(feature.geometry().unwrap(), expected);
@@ -216,9 +214,7 @@ mod tests {
             geometry: vec![],
             ..Default::default()
         };
-        let mut layer = layer.clone();
-        layer.features = vec![feature];
-        let bytes = encode_layer(layer);
+        let bytes = encode_feature(layer.clone(), feature);
         let reader = MvtReaderRef::new(&bytes).unwrap();
         let feature = first_feature(&reader);
         assert!(!feature.has_properties());

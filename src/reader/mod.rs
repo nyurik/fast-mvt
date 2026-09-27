@@ -24,6 +24,12 @@ mod tests {
         .encode_to_vec()
     }
 
+    /// Encodes a single-layer tile whose layer carries `feature` as its sole feature.
+    pub fn encode_feature(mut layer: proto_tile::Layer, feature: proto_tile::Feature) -> Vec<u8> {
+        layer.features = vec![feature];
+        encode_layer(layer)
+    }
+
     /// The first feature of the first layer, for tests that only need one.
     pub fn first_feature<'r>(reader: &'r MvtReaderRef<'_>) -> MvtFeatureRef<'r> {
         reader.layers().next().unwrap().features().next().unwrap()

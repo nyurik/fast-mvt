@@ -7,6 +7,8 @@ just := quote(just_executable())
 binstall_args := if env('CI', '') != '' {'--no-confirm --no-track --disable-telemetry'} else {''}
 # location of the coverage output, used by CI
 coverage_lcov := 'target/llvm-cov/lcov.info'
+# location of the jscpd copy/paste detection reports, used by CI
+cpd_output := 'target/jscpd'
 # All targets except benches (running gungraun benches needs Valgrind; see `bench-cpu`/`bench-check`).
 non_bench_targets := '--lib --bins --tests --examples'
 
@@ -68,6 +70,11 @@ ci-coverage: env-info && \
     rm -rf {{quote(parent_directory(coverage_lcov))}}
     mkdir -p {{quote(parent_directory(coverage_lcov))}}
 
+# Find copy/pasted code, marking clones absent from base_ref as new, and write a Markdown summary for the PR comment
+ci-cpd base_ref='origin/main':  (assert-cmd 'jq') (cpd '--reporters' 'console,json' '--output' cpd_output '--baseline-from-ref' base_ref)
+    jq -r --arg base {{quote(base_ref)}} -f .github/jscpd-summary.jq {{quote(cpd_output / 'jscpd-report.json')}} > {{quote(cpd_output / 'summary.md')}}
+    cat {{quote(cpd_output / 'summary.md')}} >> "${GITHUB_STEP_SUMMARY:-/dev/stdout}"
+
 # Run all tests as expected by CI
 ci-test: env-info codegen-check test-fmt clippy test-feature-matrix bench-check test-doc && assert-git-is-clean
 
@@ -97,6 +104,13 @@ _coverage *report_args:  (cargo-install 'cargo-llvm-cov')
     cargo llvm-cov clean --workspace
     cargo llvm-cov --no-report --workspace --all-features {{non_bench_targets}}
     cargo llvm-cov report --include-build-script --ignore-filename-regex 'src/generated/' {{report_args}}
+
+# jscpd's binstall metadata maps both of its binaries (jscpd and cpd) to the same archive file,
+# so install just the `jscpd` binary, and locate it in the archive by its name
+
+# Find copy/pasted code with jscpd, configured in .jscpd.json. See `just cpd --help` for all options
+cpd *args:  (cargo-install 'jscpd' 'jscpd --bin jscpd' '--bin-dir={bin}{binary-ext}')
+    jscpd {{args}}
 
 # Build and open code documentation
 docs *args='--open':
@@ -226,7 +240,7 @@ assert-git-is-clean:
 
 # Check if a certain Cargo command is installed, and install it if needed
 [private]
-cargo-install $COMMAND $INSTALL_CMD='' *args='':
+cargo-install $COMMAND $INSTALL_CMD='' $BINSTALL_EXTRA_ARGS='' *args='':
     #!/usr/bin/env bash
     set -euo pipefail
     unset CARGO_BUILD_WARNINGS
@@ -238,7 +252,7 @@ cargo-install $COMMAND $INSTALL_CMD='' *args='':
             { set +x; } 2>/dev/null
         else
             set -x
-            cargo binstall ${INSTALL_CMD:-$COMMAND} {{binstall_args}} --locked
+            cargo binstall ${INSTALL_CMD:-$COMMAND} {{binstall_args}} $BINSTALL_EXTRA_ARGS --locked
             { set +x; } 2>/dev/null
         fi
     fi

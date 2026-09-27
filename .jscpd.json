@@ -1,0 +1,5 @@
+{
+  "ignore": [".git/**", "target/**", "src/generated/**", "fixtures/**"],
+  "output": "target/jscpd",
+  "noTips": true
+}

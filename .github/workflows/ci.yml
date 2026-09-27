@@ -64,6 +64,33 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: target/llvm-cov/lcov.info
 
+  cpd:
+    name: Copy/Paste Detection
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      BASE_REF: ${{ github.base_ref }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Fetch base branch to detect newly added clones
+        run: git fetch --no-tags --depth=1 origin "$BASE_REF"
+      - uses: taiki-e/install-action@v2.86.1
+        with: { tool: 'just,cargo-binstall' }
+      - run: just ci-cpd "origin/$BASE_REF"
+        env:
+          CPD_BLOB_URL: ${{ github.server_url }}/${{ github.repository }}/blob/${{ github.event.pull_request.head.sha }}
+      # Pull requests from forks get a read-only token, so they only get the job summary
+      - if: github.event.pull_request.head.repo.full_name == github.repository
+        name: Post summary as a PR comment
+        uses: marocchino/sticky-pull-request-comment@v3
+        with:
+          header: jscpd
+          path: target/jscpd/summary.md
+          skip_unchanged: true
+
   # This job checks if any of the previous jobs failed or were canceled.
   # This approach also allows some jobs to be skipped if they are not needed.
   ci-passed:

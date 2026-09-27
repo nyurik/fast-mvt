@@ -205,6 +205,8 @@ The generated protobuf files are checked in, so normal builds do not require
   Install it with `cargo install just`.
 * To get a list of available commands, run `just`.
 * To run tests, use `just test`.
+* Copy/paste detection uses [jscpd](https://github.com/kucherenko/jscpd), configured in [`.jscpd.json`](.jscpd.json).
+  Run `just cpd` locally; on pull requests, CI posts a summary comment highlighting newly added clones.
 
 ## Credits
 
