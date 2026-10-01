@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.3](https://github.com/nyurik/fast-mvt/compare/v0.6.2...v0.6.3) - 2026-10-01
+
+### Other
+
+- detect code dups ([#51](https://github.com/nyurik/fast-mvt/pull/51))
+- *(deps)* bump the all-cargo-version-updates group across 1 directory with 3 updates ([#44](https://github.com/nyurik/fast-mvt/pull/44))
+- [pre-commit.ci] pre-commit autoupdate ([#41](https://github.com/nyurik/fast-mvt/pull/41))
+- gungraun benchmarks ([#40](https://github.com/nyurik/fast-mvt/pull/40))
+
 ## [0.6.2](https://github.com/nyurik/fast-mvt/compare/v0.6.1...v0.6.2) - 2026-07-20
 
 ### Other
