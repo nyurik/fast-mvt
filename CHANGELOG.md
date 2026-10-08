@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0](https://github.com/nyurik/fast-mvt/compare/v0.6.2...v0.7.0) - 2026-10-08
+
+### Added
+
+- *(writer)* [**breaking**] stream features into the tile bytes, from borrowed input ([#53](https://github.com/nyurik/fast-mvt/pull/53))
+  - Features are written straight into the tile bytes as they end, so a layer costs no allocation per
+    feature. Output is byte-identical to before; encoding allocates about 90% less and runs about 16%
+    fewer instructions from a borrowed tile.
+  - New: `MvtLayerBuilder::feature_of(MvtGeomType)` starts a feature whose geometry is added from
+    coordinates with `points()`, `line()` or `ring(coords, exterior)` (rings are rewound to the MVT
+    winding as needed), without building a `geo_types` geometry.
+  - New: `MvtFeatureBuilder::tag_ref(&str, MvtValueRef)` writes a borrowed tag, allocating only for a
+    key or value the layer has not seen yet.
+  - `MvtValueRef` no longer needs the `reader` feature, and gains `From<&MvtValue>`.
+  - **Breaking:** `MvtTileBuilder::with_capacity`, `MvtTileBuilder::layer_with_capacity` and
+    `MvtLayerBuilder::with_capacity` are removed, as the encoded size is not known up front. Use
+    `MvtTileBuilder::new()`, `tile.layer(name)` and `MvtLayerBuilder::new(name)` instead.
+  - The `writer` feature now uses `foldhash` instead of `dup-indexer`.
+
+### Other
+
+- fix release-plz CI and fmt
+- reserve space for polygon ring closure ([#47](https://github.com/nyurik/fast-mvt/pull/47))
+- detect code dups ([#51](https://github.com/nyurik/fast-mvt/pull/51))
+- *(deps)* bump the all-cargo-version-updates group across 1 directory with 3 updates ([#44](https://github.com/nyurik/fast-mvt/pull/44))
+- [pre-commit.ci] pre-commit autoupdate ([#41](https://github.com/nyurik/fast-mvt/pull/41))
+- gungraun benchmarks ([#40](https://github.com/nyurik/fast-mvt/pull/40))
+
 ## [0.6.2](https://github.com/nyurik/fast-mvt/compare/v0.6.1...v0.6.2) - 2026-07-20
 
 ### Other
