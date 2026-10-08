@@ -1,9 +1,7 @@
-use std::fmt;
-
 use usize_cast::IntoUsize;
 
 use crate::generated::vector_tile::tile as proto_tile;
-use crate::{MvtError, MvtResult, MvtValue};
+use crate::{MvtError, MvtResult, MvtValueRef};
 
 #[derive(Debug, Clone)]
 pub struct MvtPropertyIter<'a> {
@@ -42,50 +40,6 @@ impl<'a> Iterator for MvtPropertyIter<'a> {
     }
 }
 
-#[derive(Copy, Clone, PartialEq)]
-pub enum MvtValueRef<'a> {
-    String(&'a str),
-    Float(f32),
-    Double(f64),
-    Int(i64),
-    UInt(u64),
-    SInt(i64),
-    Bool(bool),
-    Null,
-}
-
-impl MvtValueRef<'_> {
-    #[must_use]
-    pub fn into_owned(self) -> MvtValue {
-        match self {
-            Self::String(value) => MvtValue::String(value.to_string()),
-            Self::Float(value) => MvtValue::Float(value),
-            Self::Double(value) => MvtValue::Double(value),
-            Self::Int(value) => MvtValue::Int(value),
-            Self::UInt(value) => MvtValue::UInt(value),
-            Self::SInt(value) => MvtValue::SInt(value),
-            Self::Bool(value) => MvtValue::Bool(value),
-            Self::Null => MvtValue::Null,
-        }
-    }
-}
-
-impl fmt::Debug for MvtValueRef<'_> {
-    /// Renders the bare textual value (strings quoted)
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            MvtValueRef::String(value) => write!(f, "{value:?}"),
-            MvtValueRef::Float(value) => write!(f, "{value} (float)"),
-            MvtValueRef::Double(value) => write!(f, "{value} (double)"),
-            MvtValueRef::Int(value) => write!(f, "{value} (int)"),
-            MvtValueRef::SInt(value) => write!(f, "{value} (sint)"),
-            MvtValueRef::UInt(value) => write!(f, "{value} (uint)"),
-            MvtValueRef::Bool(value) => write!(f, "{value} (bool)"),
-            MvtValueRef::Null => f.write_str("null"),
-        }
-    }
-}
-
 pub(crate) fn value_ref<'a>(value: &'a proto_tile::ValueView<'a>) -> MvtValueRef<'a> {
     if let Some(value) = value.string_value {
         MvtValueRef::String(value)
@@ -111,33 +65,6 @@ mod tests {
     use super::*;
     use crate::MvtReaderRef;
     use crate::reader::tests::{encode_feature, first_feature};
-
-    #[test]
-    fn value_ref_debug_renders_bare_values() {
-        insta::assert_debug_snapshot!(MvtValueRef::String("x"), @r#""x""#);
-        insta::assert_debug_snapshot!(MvtValueRef::Float(1.25), @"1.25 (float)");
-        insta::assert_debug_snapshot!(MvtValueRef::Double(2.5), @"2.5 (double)");
-        insta::assert_debug_snapshot!(MvtValueRef::Int(-3), @"-3 (int)");
-        insta::assert_debug_snapshot!(MvtValueRef::UInt(4), @"4 (uint)");
-        insta::assert_debug_snapshot!(MvtValueRef::SInt(-5), @"-5 (sint)");
-        insta::assert_debug_snapshot!(MvtValueRef::Bool(true), @"true (bool)");
-        insta::assert_debug_snapshot!(MvtValueRef::Null, @"null");
-    }
-
-    #[test]
-    fn value_ref_into_owned_covers_every_variant() {
-        assert_eq!(
-            MvtValueRef::String("x").into_owned(),
-            MvtValue::String("x".into())
-        );
-        assert_eq!(MvtValueRef::Float(1.25).into_owned(), MvtValue::Float(1.25));
-        assert_eq!(MvtValueRef::Double(2.5).into_owned(), MvtValue::Double(2.5));
-        assert_eq!(MvtValueRef::Int(-3).into_owned(), MvtValue::Int(-3));
-        assert_eq!(MvtValueRef::UInt(4).into_owned(), MvtValue::UInt(4));
-        assert_eq!(MvtValueRef::SInt(-5).into_owned(), MvtValue::SInt(-5));
-        assert_eq!(MvtValueRef::Bool(true).into_owned(), MvtValue::Bool(true));
-        assert_eq!(MvtValueRef::Null.into_owned(), MvtValue::Null);
-    }
 
     #[test]
     fn property_iterator_reports_malformed_tags() {

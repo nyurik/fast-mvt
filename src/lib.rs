@@ -34,14 +34,15 @@ pub use serde_json;
 #[cfg(feature = "reader")]
 mod reader;
 #[cfg(feature = "reader")]
-pub use reader::{MvtFeatureRef, MvtLayerRef, MvtPropertyIter, MvtReaderRef, MvtValueRef};
+pub use reader::{MvtFeatureRef, MvtLayerRef, MvtPropertyIter, MvtReaderRef};
 
 mod types;
 #[cfg(feature = "json")]
 pub use types::MvtJsonValueError;
 pub use types::{
-    DEFAULT_EXTENT, MvtCoord, MvtExtent, MvtFeature, MvtGeometry, MvtLayer, MvtLineString,
-    MvtMultiLineString, MvtMultiPoint, MvtMultiPolygon, MvtPoint, MvtPolygon, MvtTile, MvtValue,
+    DEFAULT_EXTENT, MvtCoord, MvtExtent, MvtFeature, MvtGeomType, MvtGeometry, MvtLayer,
+    MvtLineString, MvtMultiLineString, MvtMultiPoint, MvtMultiPolygon, MvtPoint, MvtPolygon,
+    MvtTile, MvtValue, MvtValueRef,
 };
 
 #[cfg(feature = "writer")]

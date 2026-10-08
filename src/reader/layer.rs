@@ -2,7 +2,8 @@ use std::fmt;
 use std::num::NonZeroU32;
 
 use super::feature::MvtFeatureRef;
-use super::property::{MvtValueRef, value_ref};
+use super::property::value_ref;
+use crate::MvtValueRef;
 use crate::generated::vector_tile::tile as proto_tile;
 use crate::{DEFAULT_EXTENT, MvtError, MvtLayer, MvtResult};
 
@@ -44,12 +45,10 @@ impl<'a> MvtLayerRef<'a> {
         &self.0.keys
     }
 
-    #[must_use]
     pub fn values(self) -> impl ExactSizeIterator<Item = MvtValueRef<'a>> {
         self.0.values.iter().map(value_ref)
     }
 
-    #[must_use]
     pub fn features(self) -> impl ExactSizeIterator<Item = MvtFeatureRef<'a>> {
         self.0
             .features

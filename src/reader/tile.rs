@@ -37,7 +37,6 @@ impl<'a> MvtReaderRef<'a> {
         Ok(Self(tile))
     }
 
-    #[must_use]
     pub fn layers(&self) -> impl ExactSizeIterator<Item = MvtLayerRef<'_>> {
         self.0.layers.iter().map(MvtLayerRef::new)
     }
@@ -83,8 +82,8 @@ mod tests {
 
     use super::*;
     use crate::MvtValue;
+    use crate::MvtValueRef;
     use crate::generated::vector_tile::tile as proto_tile;
-    use crate::reader::MvtValueRef;
     use crate::reader::tests::{encode_feature, encode_layer, first_feature};
 
     #[test]

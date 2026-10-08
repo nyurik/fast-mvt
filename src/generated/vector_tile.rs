@@ -134,6 +134,7 @@ pub mod tile {
     #[allow(unused_imports)]
     use super::*;
     /// GeomType is described in section 4.3.4 of the specification
+    #[allow(non_camel_case_types)]
     #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
     #[cfg_attr(feature = "arbitrary", derive(::arbitrary::Arbitrary))]
     #[repr(i32)]

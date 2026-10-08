@@ -5,7 +5,7 @@ mod tile;
 
 pub use feature::MvtFeatureRef;
 pub use layer::MvtLayerRef;
-pub use property::{MvtPropertyIter, MvtValueRef};
+pub use property::MvtPropertyIter;
 pub use tile::MvtReaderRef;
 
 #[cfg(test)]

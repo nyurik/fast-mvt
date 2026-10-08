@@ -3,7 +3,8 @@ use std::fmt::{self, Write as _};
 use buffa::Enumeration as _;
 use geo_types::{Coord, Geometry, LineString, Point, Polygon};
 
-use super::property::{MvtPropertyIter, MvtValueRef};
+use super::property::MvtPropertyIter;
+use crate::MvtValueRef;
 use crate::generated::vector_tile::tile as proto_tile;
 use crate::geom_reader::decode_geometry;
 use crate::{MvtFeature, MvtGeometry, MvtResult};

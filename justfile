@@ -9,8 +9,6 @@ binstall_args := if env('CI', '') != '' {'--no-confirm --no-track --disable-tele
 coverage_lcov := 'target/llvm-cov/lcov.info'
 # location of the jscpd copy/paste detection reports, used by CI
 cpd_output := 'target/jscpd'
-# All targets except benches (running gungraun benches needs Valgrind; see `bench-cpu`/`bench-check`).
-non_bench_targets := '--lib --bins --tests --examples'
 
 # if running in CI, treat warnings as errors by setting CARGO_BUILD_WARNINGS to 'deny' unless it is already set
 # Use `CI=true just ci-test` to run the same tests as in GitHub CI.
@@ -76,7 +74,7 @@ ci-cpd base_ref='origin/main':  (assert-cmd 'jq') (cpd '--reporters' 'console,js
     cat {{quote(cpd_output / 'summary.md')}} >> "${GITHUB_STEP_SUMMARY:-/dev/stdout}"
 
 # Run all tests as expected by CI
-ci-test: env-info codegen-check test-fmt clippy test-feature-matrix bench-check test-doc && assert-git-is-clean
+ci-test: env-info codegen-check test-fmt clippy test-feature-matrix bench-check test-doc test-fuzz && assert-git-is-clean
 
 # Compile default features with minimal dependencies on the configured MSRV
 ci-test-msrv:
@@ -102,7 +100,8 @@ coverage:  (_coverage '--open')
 # Clean, collect, and aggregate coverage using the requested report arguments
 _coverage *report_args:  (cargo-install 'cargo-llvm-cov')
     cargo llvm-cov clean --workspace
-    cargo llvm-cov --no-report --workspace --all-features {{non_bench_targets}}
+    # `fuzz` is excluded: `--bins` would run its libFuzzer binary, which never exits
+    cargo llvm-cov --no-report --workspace --exclude fuzz --all-features --lib --bins --tests --examples
     cargo llvm-cov report --include-build-script --ignore-filename-regex 'src/generated/' {{report_args}}
 
 # jscpd's binstall metadata maps both of its binaries (jscpd and cpd) to the same archive file,
@@ -182,7 +181,7 @@ semver *args:  (cargo-install 'cargo-semver-checks')
 
 # Run all tests
 test:
-    cargo test --workspace --all-features {{non_bench_targets}}
+    cargo test --workspace --all-features --lib --bins --tests --examples
     cargo test --doc --workspace --all-features
 
 # Run tests with every supported feature combination
@@ -191,6 +190,14 @@ test-feature-matrix:
     cargo check --all-targets --no-default-features --features reader
     cargo check --all-targets --no-default-features --features writer
     cargo test --all-features
+
+# Run the mvt_roundtrip fuzz target; extra args go to libFuzzer, e.g. `just fuzz -max_total_time=60`. Requires nightly toolchain
+fuzz *args:  (cargo-install 'cargo-fuzz')
+    # cargo-fuzz defaults to a musl target, which the sanitizers can't link statically
+    cd fuzz && cargo +nightly fuzz run --target "$(rustc +nightly -vV | sed -n 's/^host: //p')" mvt_roundtrip -- {{args}}
+
+# Run the fuzz target for a short while, so CI notices a broken target or an easily found bug
+test-fuzz:  (fuzz '-max_total_time=20')
 
 # Test documentation generation
 test-doc:  (docs '')
@@ -205,7 +212,6 @@ udeps:  (cargo-install 'cargo-udeps')
 
 # Update all dependencies, including breaking changes. Requires nightly toolchain (install with `rustup install nightly`)
 update:
-    cargo +nightly -Z unstable-options update --breaking
     cargo update
     {{just}} update-generated
 

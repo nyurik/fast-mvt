@@ -1,3 +1,49 @@
+[workspace]
+members = [".", "fuzz"]
+
+[workspace.dependencies]
+arbitrary = { version = "1.4", features = ["derive"] }
+buffa = "0.9.2"
+buffa-build = "0.9.2"
+clap = { version = "4", features = ["derive"] }
+criterion = { version = "0.8", features = ["html_reports"] }
+foldhash = "0.2.0"
+geo-types = "0.7.19"
+gungraun = "0.20.0"
+insta = "1.43"
+mvt = "0.15.0"
+mvt-reader = "2.3.0"
+prost = "0.14.3"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = { version = "1.0.150" }
+tempfile = "3.27.0"
+test_each_file = "0.3.5"
+thiserror = "2.0.11"
+tinymvt = "0.3.0"
+usize_cast = "1.1.0"
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
+unused_qualifications = "warn"
+
+[workspace.lints.clippy]
+# Restrictions
+# `deny`, not `forbid`: clap's derive macros emit `#[allow(clippy::style)]`, and
+# `disallowed_methods` is a `style` lint, so `forbid` would break compilation
+disallowed_methods = "deny"
+panic_in_result_fn = "warn"
+todo = "warn"
+unwrap_used = "warn"
+# Pedantics without being too noisy
+cargo = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+multiple_crate_versions = "allow"
+too_many_lines = "allow"
+unimplemented = "warn"
+use_self = "warn"
+
 [package]
 name = "fast-mvt"
 version = "0.6.2"
@@ -45,60 +91,40 @@ required-features = ["reader", "writer"]
 [features]
 default = ["reader", "writer", "json"]
 reader = []
-writer = ["dep:dup-indexer"]
+writer = ["dep:foldhash"]
 json = ["dep:serde", "dep:serde_json", "buffa/json"]
 codegen = ["dep:buffa-build"]
 arbitrary = ["dep:arbitrary", "buffa/arbitrary"]
 cli = ["reader", "dep:clap"]
 
 [dependencies]
-arbitrary = { version = "1.4", features = ["derive"], optional = true }
-buffa = "0.9.0"
-clap = { version = "4", features = ["derive"], optional = true }
-dup-indexer = { version = "0.5.0", optional = true }
-geo-types = "0.7.19"
-serde = { version = "1.0.228", features = ["derive"], optional = true }
-serde_json = { version = "1.0.150", optional = true }
-thiserror = "2.0.11"
-usize_cast = "1.1.0"
+arbitrary = { workspace = true, optional = true }
+buffa.workspace = true
+clap = { workspace = true, optional = true }
+foldhash = { workspace = true, optional = true }
+geo-types.workspace = true
+serde = { workspace = true, features = ["derive"], optional = true }
+serde_json = { workspace = true, optional = true }
+thiserror.workspace = true
+usize_cast.workspace = true
 
 [build-dependencies]
-buffa-build = { version = "0.9.0", optional = true }
+buffa-build = { workspace = true, optional = true }
 
 [dev-dependencies]
-anyhow = "1"
-criterion = { version = "0.8", features = ["html_reports"] }
-gungraun = "0.19"
-insta = "1.43"
-mvt = "0.15.0"
-mvt-reader = "2.3.0"
-prost = "0.14.3"
-tempfile = "3.27.0"
-test_each_file = "0.3.5"
-tinymvt = "0.3.0"
+criterion.workspace = true
+gungraun.workspace = true
+insta.workspace = true
+mvt.workspace = true
+mvt-reader.workspace = true
+prost.workspace = true
+tempfile.workspace = true
+test_each_file.workspace = true
+tinymvt.workspace = true
 
 # gungraun (Valgrind/Callgrind) benchmarks need debug info to map instruction counts to source.
 [profile.bench]
 debug = true
 
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
-unused_qualifications = "warn"
-
-[lints.clippy]
-# Restrictions
-# `deny`, not `forbid`: clap's derive macros emit `#[allow(clippy::style)]`, and
-# `disallowed_methods` is a `style` lint, so `forbid` would break compilation
-disallowed_methods = "deny"
-panic_in_result_fn = "warn"
-todo = "warn"
-unwrap_used = "warn"
-# Pedantics without being too noisy
-cargo = { level = "warn", priority = -1 }
-pedantic = { level = "warn", priority = -1 }
-missing_errors_doc = "allow"
-missing_panics_doc = "allow"
-multiple_crate_versions = "allow"
-too_many_lines = "allow"
-unimplemented = "warn"
-use_self = "warn"
+[lints]
+workspace = true

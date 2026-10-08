@@ -31,7 +31,7 @@ fn try_re_encode(tile: &MvtTile) -> MvtResult<MvtTile> {
 fn empty_tile_round_trips() {
     let bytes = MvtTileBuilder::new().encode();
     let decoded = MvtReaderRef::new(&bytes).unwrap().to_tile().unwrap();
-    assert!(decoded.layers.is_empty());
+    assert_eq!(decoded.layers, []);
 }
 
 #[test]
@@ -56,7 +56,7 @@ fn owned_builder_api_encodes_like_mvt_crate_surface() {
 
     let tile = layer.end();
     let tile = tile.layer("layer").unwrap().end();
-    assert!(!tile.encode().is_empty());
+    assert_ne!(tile.encode(), Vec::<u8>::new());
 
     let bytes = MvtTileBuilder::new()
         .layer("layer")
@@ -66,7 +66,7 @@ fn owned_builder_api_encodes_like_mvt_crate_surface() {
         .end()
         .end()
         .encode();
-    assert!(!bytes.is_empty());
+    assert_ne!(bytes, Vec::<u8>::new());
 }
 
 #[test]

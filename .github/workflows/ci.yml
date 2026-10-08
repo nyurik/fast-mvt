@@ -22,10 +22,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with: { submodules: true }
+      - uses: dtolnay/rust-toolchain@stable
       - if: github.event_name != 'release' && github.event_name != 'workflow_dispatch'
         uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@v2.86.1
         with: { tool: 'just,cargo-binstall,protoc' }
+      # `just test-fuzz` needs nightly for the sanitizers; installed without changing the default toolchain
+      - run: rustup toolchain install nightly --profile minimal
       - run: just ci-test
 
   test-msrv:
@@ -54,6 +57,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with: { submodules: true }
+      - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@v2.86.1
         with: { tool: 'just,cargo-llvm-cov,protoc' }

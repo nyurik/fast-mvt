@@ -20,6 +20,14 @@ pub type MvtGeometry = Geometry<i32>;
 
 pub const DEFAULT_EXTENT: MvtExtent = MvtExtent::new(4096).unwrap();
 
+/// The geometry type of a feature whose geometry is written piece by piece.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MvtGeomType {
+    Point,
+    LineString,
+    Polygon,
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct MvtTile {
     pub layers: Vec<MvtLayer>,
@@ -51,12 +59,12 @@ impl MvtTile {
 
     #[cfg(feature = "writer")]
     pub fn encode(self) -> MvtResult<Vec<u8>> {
-        crate::writer::encode_tile(self)
+        crate::writer::encode_tile(&self)
     }
 
     #[cfg(feature = "writer")]
     pub fn encode_ref(&self) -> MvtResult<Vec<u8>> {
-        crate::writer::encode_tile_ref(self)
+        crate::writer::encode_tile(self)
     }
 }
 
@@ -326,6 +334,66 @@ fn json_number(value: f64) -> Result<serde_json::Value, MvtJsonValueError> {
         .ok_or(MvtJsonValueError::NonFiniteFloat)
 }
 
+impl<'a> From<&'a MvtValue> for MvtValueRef<'a> {
+    fn from(value: &'a MvtValue) -> Self {
+        match value {
+            MvtValue::String(value) => Self::String(value),
+            MvtValue::Float(value) => Self::Float(*value),
+            MvtValue::Double(value) => Self::Double(*value),
+            MvtValue::Int(value) => Self::Int(*value),
+            MvtValue::UInt(value) => Self::UInt(*value),
+            MvtValue::SInt(value) => Self::SInt(*value),
+            MvtValue::Bool(value) => Self::Bool(*value),
+            MvtValue::Null => Self::Null,
+        }
+    }
+}
+
+/// A borrowed [`MvtValue`], as read from a tile or written without allocating.
+#[derive(Copy, Clone, PartialEq)]
+pub enum MvtValueRef<'a> {
+    String(&'a str),
+    Float(f32),
+    Double(f64),
+    Int(i64),
+    UInt(u64),
+    SInt(i64),
+    Bool(bool),
+    Null,
+}
+
+impl MvtValueRef<'_> {
+    #[must_use]
+    pub fn into_owned(self) -> MvtValue {
+        match self {
+            Self::String(value) => MvtValue::String(value.to_string()),
+            Self::Float(value) => MvtValue::Float(value),
+            Self::Double(value) => MvtValue::Double(value),
+            Self::Int(value) => MvtValue::Int(value),
+            Self::UInt(value) => MvtValue::UInt(value),
+            Self::SInt(value) => MvtValue::SInt(value),
+            Self::Bool(value) => MvtValue::Bool(value),
+            Self::Null => MvtValue::Null,
+        }
+    }
+}
+
+impl std::fmt::Debug for MvtValueRef<'_> {
+    /// Renders the bare textual value (strings quoted)
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            MvtValueRef::String(value) => write!(f, "{value:?}"),
+            MvtValueRef::Float(value) => write!(f, "{value} (float)"),
+            MvtValueRef::Double(value) => write!(f, "{value} (double)"),
+            MvtValueRef::Int(value) => write!(f, "{value} (int)"),
+            MvtValueRef::SInt(value) => write!(f, "{value} (sint)"),
+            MvtValueRef::UInt(value) => write!(f, "{value} (uint)"),
+            MvtValueRef::Bool(value) => write!(f, "{value} (bool)"),
+            MvtValueRef::Null => f.write_str("null"),
+        }
+    }
+}
+
 impl PartialEq for MvtValue {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -368,6 +436,33 @@ mod tests {
     use super::*;
 
     #[test]
+    fn value_ref_debug_renders_bare_values() {
+        insta::assert_debug_snapshot!(MvtValueRef::String("x"), @r#""x""#);
+        insta::assert_debug_snapshot!(MvtValueRef::Float(1.25), @"1.25 (float)");
+        insta::assert_debug_snapshot!(MvtValueRef::Double(2.5), @"2.5 (double)");
+        insta::assert_debug_snapshot!(MvtValueRef::Int(-3), @"-3 (int)");
+        insta::assert_debug_snapshot!(MvtValueRef::UInt(4), @"4 (uint)");
+        insta::assert_debug_snapshot!(MvtValueRef::SInt(-5), @"-5 (sint)");
+        insta::assert_debug_snapshot!(MvtValueRef::Bool(true), @"true (bool)");
+        insta::assert_debug_snapshot!(MvtValueRef::Null, @"null");
+    }
+
+    #[test]
+    fn value_ref_into_owned_covers_every_variant() {
+        assert_eq!(
+            MvtValueRef::String("x").into_owned(),
+            MvtValue::String("x".into())
+        );
+        assert_eq!(MvtValueRef::Float(1.25).into_owned(), MvtValue::Float(1.25));
+        assert_eq!(MvtValueRef::Double(2.5).into_owned(), MvtValue::Double(2.5));
+        assert_eq!(MvtValueRef::Int(-3).into_owned(), MvtValue::Int(-3));
+        assert_eq!(MvtValueRef::UInt(4).into_owned(), MvtValue::UInt(4));
+        assert_eq!(MvtValueRef::SInt(-5).into_owned(), MvtValue::SInt(-5));
+        assert_eq!(MvtValueRef::Bool(true).into_owned(), MvtValue::Bool(true));
+        assert_eq!(MvtValueRef::Null.into_owned(), MvtValue::Null);
+    }
+
+    #[test]
     fn owned_tile_layer_and_feature_helpers_mutate_expected_fields() {
         let mut feature = MvtFeature::new(MvtGeometry::Point(point! { x: 1, y: 2 }));
         assert_eq!(feature.id, None);
@@ -397,7 +492,7 @@ mod tests {
         assert_eq!(layer.num_features(), 1);
 
         let mut tile = MvtTile::new();
-        assert!(tile.layers.is_empty());
+        assert_eq!(tile.layers, []);
         tile.add_layer(layer);
         assert_eq!(tile.layers.len(), 1);
     }

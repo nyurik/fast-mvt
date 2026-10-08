@@ -1,147 +1,135 @@
 use crate::generated::vector_tile::tile::GeomType;
 use crate::geom::{Command, signed_area};
-use crate::{MvtCoord, MvtError, MvtGeometry, MvtLineString, MvtPolygon, MvtResult};
+use crate::{MvtCoord, MvtError, MvtGeometry, MvtPolygon, MvtResult};
 
 pub(crate) fn encode_parameter(value: i32) -> u32 {
     ((value << 1) ^ (value >> 31)).cast_unsigned()
 }
 
-pub(crate) fn encode_geometry(geometry: &MvtGeometry) -> MvtResult<(GeomType, Vec<u32>)> {
-    match geometry {
-        MvtGeometry::Point(point) => {
-            let coords = [point.0];
-            let mut encoder = GeometryEncoder::with_capacity(coords.len());
-            encoder.points(coords)?;
-            Ok((GeomType::Point, encoder.into_data()))
-        }
-        MvtGeometry::MultiPoint(points) => {
-            if points.0.is_empty() {
-                return Ok((GeomType::Point, Vec::new()));
-            }
-            let mut encoder = GeometryEncoder::with_capacity(points.0.len());
-            encoder.points(points.0.iter().map(|point| point.0))?;
-            Ok((GeomType::Point, encoder.into_data()))
-        }
-        MvtGeometry::LineString(line) => {
-            let mut encoder = GeometryEncoder::with_capacity(line.0.len());
-            encoder.line(line)?;
-            Ok((GeomType::Linestring, encoder.into_data()))
-        }
-        MvtGeometry::MultiLineString(lines) => {
-            if lines.0.is_empty() {
-                return Ok((GeomType::Linestring, Vec::new()));
-            }
-            let capacity = lines.0.iter().map(|line| line.0.len()).sum();
-            let mut encoder = GeometryEncoder::with_capacity(capacity);
-            for line in &lines.0 {
-                encoder.line(line)?;
-            }
-            Ok((GeomType::Linestring, encoder.into_data()))
-        }
-        MvtGeometry::Polygon(polygon) => {
-            let mut encoder = GeometryEncoder::with_capacity(polygon_vertex_count(polygon));
-            encoder.polygon(polygon)?;
-            Ok((GeomType::Polygon, encoder.into_data()))
-        }
-        MvtGeometry::MultiPolygon(polygons) => {
-            if polygons.0.is_empty() {
-                return Ok((GeomType::Polygon, Vec::new()));
-            }
-            let capacity = polygons.0.iter().map(polygon_vertex_count).sum();
-            let mut encoder = GeometryEncoder::with_capacity(capacity);
-            for polygon in &polygons.0 {
-                encoder.polygon(polygon)?;
-            }
-            Ok((GeomType::Polygon, encoder.into_data()))
-        }
-        MvtGeometry::GeometryCollection(collection) if collection.0.len() == 1 => {
-            encode_geometry(&collection.0[0])
-        }
-        MvtGeometry::GeometryCollection(_) => Err(MvtError::UnsupportedGeometry(
-            "GeometryCollection with multiple items",
-        )),
-        MvtGeometry::Line(_) => Err(MvtError::UnsupportedGeometry("Line")),
-        MvtGeometry::Rect(_) => Err(MvtError::UnsupportedGeometry("Rect")),
-        MvtGeometry::Triangle(_) => Err(MvtError::UnsupportedGeometry("Triangle")),
-    }
-}
-
-fn polygon_vertex_count(polygon: &MvtPolygon) -> usize {
-    polygon.exterior().0.len()
-        + polygon
-            .interiors()
-            .iter()
-            .map(|line| line.0.len())
-            .sum::<usize>()
-}
-
-struct GeometryEncoder {
-    data: Vec<u32>,
+/// The geometry commands of one feature. Kept from feature to feature so its buffers are reused.
+#[derive(Debug, Default)]
+pub(crate) struct GeometryBuf {
+    pub(crate) data: Vec<u32>,
     cursor: MvtCoord,
+    /// A ring given as an iterator, gathered to check its winding.
+    ring: Vec<MvtCoord>,
 }
 
-impl GeometryEncoder {
-    fn with_capacity(coords: usize) -> Self {
-        Self {
-            data: Vec::with_capacity(1 + coords.saturating_mul(2)),
-            cursor: MvtCoord { x: 0, y: 0 },
-        }
+impl GeometryBuf {
+    pub(crate) fn clear(&mut self) {
+        self.data.clear();
+        self.cursor = MvtCoord { x: 0, y: 0 };
     }
 
-    fn into_data(self) -> Vec<u32> {
-        self.data
+    /// Appends `geometry`, returning its MVT type.
+    pub(crate) fn push_geometry(&mut self, geometry: &MvtGeometry) -> MvtResult<GeomType> {
+        Ok(match geometry {
+            MvtGeometry::Point(point) => {
+                self.points([point.0])?;
+                GeomType::Point
+            }
+            MvtGeometry::MultiPoint(points) => {
+                self.points(points.0.iter().map(|point| point.0))?;
+                GeomType::Point
+            }
+            MvtGeometry::LineString(line) => {
+                self.line(line.0.iter().copied())?;
+                GeomType::Linestring
+            }
+            MvtGeometry::MultiLineString(lines) => {
+                for line in &lines.0 {
+                    self.line(line.0.iter().copied())?;
+                }
+                GeomType::Linestring
+            }
+            MvtGeometry::Polygon(polygon) => {
+                self.polygon(polygon)?;
+                GeomType::Polygon
+            }
+            MvtGeometry::MultiPolygon(polygons) => {
+                for polygon in &polygons.0 {
+                    self.polygon(polygon)?;
+                }
+                GeomType::Polygon
+            }
+            MvtGeometry::GeometryCollection(collection) if collection.0.len() == 1 => {
+                self.push_geometry(&collection.0[0])?
+            }
+            MvtGeometry::GeometryCollection(_) => Err(MvtError::UnsupportedGeometry(
+                "GeometryCollection with multiple items",
+            ))?,
+            MvtGeometry::Line(_) => Err(MvtError::UnsupportedGeometry("Line"))?,
+            MvtGeometry::Rect(_) => Err(MvtError::UnsupportedGeometry("Rect"))?,
+            MvtGeometry::Triangle(_) => Err(MvtError::UnsupportedGeometry("Triangle"))?,
+        })
     }
 
-    fn points(&mut self, coords: impl IntoIterator<Item = MvtCoord>) -> MvtResult<()> {
+    /// One `MoveTo` holding every point, or nothing for no points.
+    pub(crate) fn points(&mut self, coords: impl IntoIterator<Item = MvtCoord>) -> MvtResult<()> {
+        self.command(Command::MoveTo, coords)
+    }
+
+    pub(crate) fn line(&mut self, coords: impl IntoIterator<Item = MvtCoord>) -> MvtResult<()> {
+        let mut coords = coords.into_iter();
+        let first = coords.next().ok_or(MvtError::InvalidGeometry)?;
+        self.command(Command::MoveTo, [first])?;
+        self.command(Command::LineTo, coords)?;
+        Ok(())
+    }
+
+    /// Appends `command` with the deltas of `coords`. Their count is only known at the end, so the
+    /// command word is filled in last; with no coordinates, nothing is written.
+    fn command(
+        &mut self,
+        command: Command,
+        coords: impl IntoIterator<Item = MvtCoord>,
+    ) -> MvtResult<()> {
         let start = self.data.len();
         self.data.push(0);
-        let mut count = 0_u32;
+        let mut count = 0_usize;
         for coord in coords {
             self.push_delta(coord);
             count += 1;
         }
         if count == 0 {
-            return Err(MvtError::InvalidGeometry);
+            self.data.truncate(start);
+        } else {
+            self.data[start] = command.encode(u32_index(count)?)?;
         }
-        self.data[start] = Command::MoveTo.encode(count)?;
         Ok(())
     }
 
-    fn line(&mut self, line: &MvtLineString) -> MvtResult<()> {
-        let coords = &line.0;
-        if coords.is_empty() {
-            return Err(MvtError::InvalidGeometry);
-        }
-        self.data.push(Command::MoveTo.encode(1)?);
-        self.push_delta(coords[0]);
-        if coords.len() > 1 {
-            self.data
-                .push(Command::LineTo.encode(u32_index(coords.len() - 1)?)?);
-            for &coord in &coords[1..] {
-                self.push_delta(coord);
-            }
-        }
-        Ok(())
+    /// A polygon ring, rewound if needed so that exterior and interior rings turn opposite ways.
+    pub(crate) fn ring(
+        &mut self,
+        coords: impl IntoIterator<Item = MvtCoord>,
+        exterior: bool,
+    ) -> MvtResult<()> {
+        let mut ring = std::mem::take(&mut self.ring);
+        ring.clear();
+        ring.extend(coords);
+        let result = self.ring_slice(&ring, exterior);
+        self.ring = ring;
+        result
     }
 
     fn polygon(&mut self, polygon: &MvtPolygon) -> MvtResult<()> {
-        self.ring(polygon.exterior(), true)?;
+        self.ring_slice(&polygon.exterior().0, true)?;
         for ring in polygon.interiors() {
-            self.ring(ring, false)?;
+            self.ring_slice(&ring.0, false)?;
         }
         Ok(())
     }
 
-    fn ring(&mut self, ring: &MvtLineString, exterior: bool) -> MvtResult<()> {
-        let coords = without_trailing_duplicate(&ring.0);
+    fn ring_slice(&mut self, coords: &[MvtCoord], exterior: bool) -> MvtResult<()> {
+        let coords = without_trailing_duplicate(coords);
         if coords.is_empty() {
             return Err(MvtError::InvalidGeometry);
         }
         let area = signed_area(coords);
         let reverse = area != 0 && (area > 0) != exterior;
         self.data.push(Command::MoveTo.encode(1)?);
-        let first = ring_coord(coords, 0, reverse);
-        self.push_delta(first);
+        self.push_delta(ring_coord(coords, 0, reverse));
         if coords.len() > 1 {
             self.data
                 .push(Command::LineTo.encode(u32_index(coords.len() - 1)?)?);
@@ -178,7 +166,7 @@ fn ring_coord(coords: &[MvtCoord], idx: usize, reverse: bool) -> MvtCoord {
     }
 }
 
-fn u32_index(value: usize) -> MvtResult<u32> {
+pub(crate) fn u32_index(value: usize) -> MvtResult<u32> {
     u32::try_from(value).map_err(|_| MvtError::IndexOverflow(value))
 }
 
@@ -190,6 +178,12 @@ mod tests {
     };
 
     use super::*;
+
+    fn encode_geometry(geometry: &MvtGeometry) -> MvtResult<(GeomType, Vec<u32>)> {
+        let mut buf = GeometryBuf::default();
+        let geom_type = buf.push_geometry(geometry)?;
+        Ok((geom_type, buf.data))
+    }
 
     #[test]
     fn encodes_spec_point() {
@@ -280,11 +274,10 @@ mod tests {
 
     #[test]
     fn encoder_edge_cases() {
-        // No coordinates fed to `points` is an error.
-        assert!(matches!(
-            GeometryEncoder::with_capacity(0).points(std::iter::empty::<MvtCoord>()),
-            Err(MvtError::InvalidGeometry)
-        ));
+        // No points is no geometry.
+        let mut geometry = GeometryBuf::default();
+        geometry.points(std::iter::empty::<MvtCoord>()).unwrap();
+        assert_eq!(geometry.data, Vec::<u32>::new());
         // Single-vertex line and ring skip the `LineTo` branch.
         encode_geometry(&MvtGeometry::LineString(line_string![(x: 1, y: 2)])).unwrap();
         encode_geometry(&MvtGeometry::Polygon(polygon![(x: 1, y: 2)])).unwrap();

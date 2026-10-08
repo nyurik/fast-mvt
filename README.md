@@ -99,24 +99,50 @@ fn create_tile() -> MvtResult<Vec<u8>> {
 ```
 
 `MvtTileBuilder` is the underlying root, useful when you want a tile-first
-structure or need to preallocate. It nests tile → layer → feature and unwinds in
-reverse: `feature.end()` returns the layer, `layer.end()` returns the tile, then
-`tile.encode()` produces the bytes. The `with_capacity` constructors preallocate
-for a known number of layers or features:
+structure. It nests tile → layer → feature and unwinds in reverse:
+`feature.end()` returns the layer, `layer.end()` returns the tile, then
+`tile.encode()` produces the bytes:
 
 ```rust
 use fast_mvt::{MvtGeometry, MvtResult, MvtTileBuilder};
 
 fn write_tile() -> MvtResult<Vec<u8>> {
-    let tile = MvtTileBuilder::with_capacity(1);
-    let layer = tile.layer_with_capacity("places", 1)?;
+    let tile = MvtTileBuilder::new();
 
-    let mut feature = layer.feature(&MvtGeometry::Point((1, 2).into()))?;
+    let mut feature = tile
+        .layer("places")?
+        .feature(&MvtGeometry::Point((1, 2).into()))?;
     feature.id(Some(7));
     feature.tag("name", "Example")?;
-    feature.tag("visible", true)?;
+    let tile = feature.end().end();
 
+    // The tile takes as many layers as you like.
+    let feature = tile
+        .layer("landmarks")?
+        .feature(&MvtGeometry::Point((5, 6).into()))?;
     Ok(feature.end().end().encode())
+}
+```
+
+### Writing straight from your own data
+
+Features are written to the tile bytes as they end, and the builders reuse their
+buffers, so a layer of any size costs no allocation per feature. To keep it that
+way when your data is not a `geo_types` geometry, start a feature with
+`feature_of()` and add its geometry from coordinates with `points()`, `line()` or
+`ring()`. `tag_ref()` takes a borrowed key and value, and allocates only for a key
+or value the layer has not seen yet:
+
+```rust
+use fast_mvt::{MvtCoord, MvtGeomType, MvtLayerBuilder, MvtResult, MvtValueRef};
+
+fn write_square(name: &str) -> MvtResult<Vec<u8>> {
+    let square = [(0, 0), (10, 0), (10, 10), (0, 10)].map(|(x, y)| MvtCoord { x, y });
+    let mut feature = MvtLayerBuilder::new("parks")?.feature_of(MvtGeomType::Polygon);
+    // A polygon is its exterior ring followed by its holes; rings are rewound as needed.
+    feature.ring(square, true)?;
+    feature.tag_ref("name", MvtValueRef::String(name))?;
+    Ok(feature.end().encode())
 }
 ```
 
@@ -159,9 +185,9 @@ Run with `just bench-decode`:
 
 | Decoder                         | Time     | Throughput  | Compare     |
 |---------------------------------|----------|-------------|-------------|
-| `fast-mvt`                      | 97.6 ms  | 157.9 MiB/s | -           |
-| `tinymvt 0.3.0`                 | 192.3 ms | 80.2 MiB/s  | 2.0x slower |
-| `mvt-reader 2.3.0`              | 597.0 ms | 25.8 MiB/s  | 6.1x slower |
+| `fast-mvt`                      | 102.5 ms | 150.3 MiB/s | -           |
+| `tinymvt 0.3.0`                 | 197.0 ms | 78.3 MiB/s  | 1.9x slower |
+| `mvt-reader 2.3.0`              | 609.2 ms | 25.3 MiB/s  | 5.9x slower |
 | `mvt` <br/>decode not supported | n/a      | n/a         | n/a         |
 
 #### Encoding
@@ -170,20 +196,20 @@ Run with `just bench-encode`:
 
 Encoding from an already parsed integer tile model:
 
+| Encoder                                | Time    | Throughput  | Compare     |
+|----------------------------------------|---------|-------------|-------------|
+| `fast-mvt`                             | 7.3 ms  | 117.3 MiB/s | -           |
+| `tinymvt 0.3.0`                        | 14.2 ms | 60.4 MiB/s  | 1.9x slower |
+| `mvt 0.15.0`                           | 23.7 ms | 36.1 MiB/s  | 3.2x slower |
+| `mvt-reader` <br/>encode not supported | n/a     | n/a         | n/a         |
+
+Encoding from an owned tile value. Note that "owned" benchmark includes deep-cloning of each tile, so it makes no sense to compare throughput between the owned vs referenced table above, only between different encoders.
+
 | Encoder                                | Time    | Throughput | Compare     |
 |----------------------------------------|---------|------------|-------------|
-| `fast-mvt`                             | 12.9 ms | 66.5 MiB/s | -           |
-| `tinymvt 0.3.0`                        | 14.1 ms | 60.9 MiB/s | 1.1x slower |
-| `mvt 0.14.0`                           | 23.4 ms | 36.7 MiB/s | 1.8x slower |
-| `mvt-reader` <br/>encode not supported | n/a     | n/a        | n/a         |
-
-Encoding from an owned tile value. Note that "owned" benchmark includes deep-cloning of each tile, so it makes no sense to compare throughput between the owned vs referenced table above, only between different encoders. Owned path is usually better.
-
-| Encoder                                | Time    | Throughput | Compare     |
-|----------------------------------------|---------|------------|-------------|
-| `fast-mvt`                             | 18.6 ms | 46.0 MiB/s | -           |
-| `tinymvt 0.3.0`                        | 23.1 ms | 37.1 MiB/s | 1.2x slower |
-| `mvt 0.14.0`                           | 32.9 ms | 26.1 MiB/s | 1.8x slower |
+| `fast-mvt`                             | 15.0 ms | 57.0 MiB/s | -           |
+| `tinymvt 0.3.0`                        | 23.6 ms | 36.3 MiB/s | 1.6x slower |
+| `mvt 0.15.0`                           | 32.9 ms | 26.0 MiB/s | 2.2x slower |
 | `mvt-reader` <br/>encode not supported | n/a     | n/a        | n/a         |
 
 ## Features
