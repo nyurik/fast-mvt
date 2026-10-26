@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1](https://github.com/nyurik/fast-mvt/compare/v0.7.0...v0.7.1) - 2026-10-26
+
+### Added
+
+- *(writer)* `MvtTileBuilder::preset_keys` starts the next layer with keys no feature has to use ([#60](https://github.com/nyurik/fast-mvt/pull/60))
+
+### Other
+
+- ignore codecov fail for projects
+
 ## [0.7.0](https://github.com/nyurik/fast-mvt/compare/v0.6.2...v0.7.0) - 2026-10-08
 
 ### Added
