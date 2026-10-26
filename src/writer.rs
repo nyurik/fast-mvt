@@ -39,8 +39,7 @@ impl MvtTileBuilder {
         Self::default()
     }
 
-    /// Makes the next layer list `keys` first, in this order, even those no feature uses,
-    /// as `PostGIS` `ST_AsMVT` lists every column.
+    /// Makes the next layer list `keys` first, in this order, **even those no feature uses**
     pub fn preset_keys<'k>(&mut self, keys: impl IntoIterator<Item = &'k str>) -> &mut Self {
         self.next_keys = keys.into_iter().map(Box::from).collect();
         self
