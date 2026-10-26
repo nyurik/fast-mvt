@@ -29,6 +29,8 @@ const LAYER_VERSION: u32 = 2;
 pub struct MvtTileBuilder {
     /// The encoded `Tile.layers` fields so far.
     buf: Vec<u8>,
+    /// Keys the next layer starts with, in this order, whether or not a feature uses them.
+    next_keys: Vec<Box<str>>,
 }
 
 impl MvtTileBuilder {
@@ -37,12 +39,19 @@ impl MvtTileBuilder {
         Self::default()
     }
 
+    /// Makes the next layer list `keys` first, in this order, even those no feature uses,
+    /// as `PostGIS` `ST_AsMVT` lists every column.
+    pub fn preset_keys<'k>(&mut self, keys: impl IntoIterator<Item = &'k str>) -> &mut Self {
+        self.next_keys = keys.into_iter().map(Box::from).collect();
+        self
+    }
+
     pub fn layer(self, name: impl Into<String>) -> MvtResult<MvtLayerBuilder> {
         let name = name.into();
         if name.is_empty() {
             return Err(MvtError::MissingLayerName);
         }
-        Ok(MvtLayerBuilder::with_tile(self, name))
+        MvtLayerBuilder::with_tile(self, name)
     }
 
     #[must_use]
@@ -111,17 +120,22 @@ impl MvtLayerBuilder {
         MvtTileBuilder::new().layer(name)
     }
 
-    fn with_tile(tile: MvtTileBuilder, name: String) -> Self {
-        Self {
+    fn with_tile(mut tile: MvtTileBuilder, name: String) -> MvtResult<Self> {
+        let mut keys = HashMap::default();
+        for key in std::mem::take(&mut tile.next_keys) {
+            let idx = u32_index(keys.len())?;
+            keys.entry(key).or_insert(idx);
+        }
+        Ok(Self {
             tile,
             name,
             extent: DEFAULT_EXTENT.get(),
             features: Vec::new(),
             num_features: 0,
-            keys: HashMap::default(),
+            keys,
             values: ValueIndex::default(),
             feature: FeatureBuf::default(),
-        }
+        })
     }
 
     pub fn extent(&mut self, extent: MvtExtent) -> &mut Self {
@@ -527,6 +541,24 @@ mod tests {
             feature.layer.feature.tags,
             vec![0, 0, 0, 1, 1, 0, 2, 2, 2, 3, 3, 4, 3, 4]
         );
+    }
+
+    #[test]
+    fn preset_keys_start_the_next_layer_only() {
+        let mut tile = MvtTileBuilder::new();
+        tile.preset_keys(["id", "name", "kind"]);
+        let mut feature = tile
+            .layer("first")
+            .unwrap()
+            .feature(&MvtGeometry::Point(point! { x: 1, y: 2 }))
+            .unwrap();
+        feature.tag("extra", MvtValue::Int(1)).unwrap();
+        feature.tag("name", MvtValue::String("a".into())).unwrap();
+        let bytes = feature.end().layer("second").unwrap().encode();
+        let proto = Tile::decode_from_slice(&bytes).unwrap();
+        assert_eq!(proto.layers[0].keys, ["id", "name", "kind", "extra"]);
+        assert_eq!(proto.layers[0].features[0].tags, [3, 0, 1, 1]);
+        assert_eq!(proto.layers[1].keys, Vec::<String>::new());
     }
 
     #[test]
