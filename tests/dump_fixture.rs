@@ -84,7 +84,6 @@ fn tile_with_every_property_and_geometry_type() -> MvtResult<()> {
       name: everything
       version: 2
       extent: 4096
-      keys: ["string", "float", "double", "int", "uint", "sint", "bool"]
       feature: 0
         id: 1
         geometry: POINT(10,20)

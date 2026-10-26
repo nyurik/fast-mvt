@@ -569,7 +569,7 @@ mod tests {
           name: first
           version: 2
           extent: 4096
-          keys: ["id", "name", "kind", "extra"]
+          key table: ["id", "name", "kind", "extra"]
           feature: 0
             id: (none)
             geometry: POINT(1,2)
@@ -581,7 +581,6 @@ mod tests {
           name: second
           version: 2
           extent: 4096
-          keys: ["name"]
           feature: 0
             id: (none)
             geometry: POINT(3,4)

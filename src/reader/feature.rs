@@ -241,7 +241,7 @@ mod tests {
           name: x
           version: 2
           extent: 4096
-          keys: (none)
+          key table: []
           feature: 0
             id: (none)
             geometry: <invalid geometry: invalid geometry command stream>
