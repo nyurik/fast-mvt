@@ -544,6 +544,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "reader")]
     fn preset_keys_start_the_next_layer_only() {
         let mut tile = MvtTileBuilder::new();
         tile.preset_keys(["id", "name", "kind"]);
@@ -555,10 +556,46 @@ mod tests {
         feature.tag("extra", MvtValue::Int(1)).unwrap();
         feature.tag("name", MvtValue::String("a".into())).unwrap();
         let bytes = feature.end().layer("second").unwrap().encode();
-        let proto = Tile::decode_from_slice(&bytes).unwrap();
-        assert_eq!(proto.layers[0].keys, ["id", "name", "kind", "extra"]);
-        assert_eq!(proto.layers[0].features[0].tags, [3, 0, 1, 1]);
-        assert_eq!(proto.layers[1].keys, Vec::<String>::new());
+
+        let reader = crate::MvtReaderRef::new(&bytes).unwrap();
+        let keys: Vec<_> = reader
+            .layers()
+            .map(|layer| (layer.name(), layer.keys()))
+            .collect();
+        insta::assert_debug_snapshot!(keys, @r#"
+        [
+            (
+                "first",
+                [
+                    "id",
+                    "name",
+                    "kind",
+                    "extra",
+                ],
+            ),
+            (
+                "second",
+                [],
+            ),
+        ]
+        "#);
+        insta::assert_debug_snapshot!(reader, @r#"
+        layer: 0
+          name: first
+          version: 2
+          extent: 4096
+          feature: 0
+            id: (none)
+            geometry: POINT(1,2)
+            properties:
+              extra = 1 (int)
+              name = "a"
+        =============================================================
+        layer: 1
+          name: second
+          version: 2
+          extent: 4096
+        "#);
     }
 
     #[test]
