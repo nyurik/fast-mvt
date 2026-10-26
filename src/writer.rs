@@ -545,8 +545,6 @@ mod tests {
     #[test]
     #[cfg(feature = "reader")]
     fn preset_keys_start_the_next_layer_only() {
-        use std::fmt::Write as _;
-
         let mut tile = MvtTileBuilder::new();
         tile.preset_keys(["id", "name", "kind"]);
         let mut feature = tile
@@ -565,18 +563,30 @@ mod tests {
         feature.tag("name", MvtValue::String("b".into())).unwrap();
         let bytes = feature.end().encode();
 
-        let mut dump = String::new();
-        for layer in crate::MvtReaderRef::new(&bytes).unwrap().layers() {
-            writeln!(dump, "{}: keys {:?}", layer.name(), layer.keys()).unwrap();
-            for feature in layer.features() {
-                writeln!(dump, "  {:?}", feature.properties_vec().unwrap()).unwrap();
-            }
-        }
-        insta::assert_snapshot!(dump, @r#"
-        first: keys ["id", "name", "kind", "extra"]
-          [("extra", 1 (int)), ("name", "a")]
-        second: keys ["name"]
-          [("name", "b")]
+        let reader = crate::MvtReaderRef::new(&bytes).unwrap();
+        insta::assert_debug_snapshot!(reader, @r#"
+        layer: 0
+          name: first
+          version: 2
+          extent: 4096
+          keys: ["id", "name", "kind", "extra"]
+          feature: 0
+            id: (none)
+            geometry: POINT(1,2)
+            properties:
+              extra = 1 (int)
+              name = "a"
+        =============================================================
+        layer: 1
+          name: second
+          version: 2
+          extent: 4096
+          keys: ["name"]
+          feature: 0
+            id: (none)
+            geometry: POINT(3,4)
+            properties:
+              name = "b"
         "#);
     }
 

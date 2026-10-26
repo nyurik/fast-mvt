@@ -241,11 +241,13 @@ mod tests {
           name: a
           version: 2
           extent: 4096
+          keys: (none)
         =============================================================
         layer: 1
           name: b
           version: 2
           extent: 4096
+          keys: (none)
         ");
     }
 }

@@ -76,6 +76,10 @@ impl fmt::Debug for MvtLayerRef<'_> {
         writeln!(f, "  name: {}", self.name())?;
         writeln!(f, "  version: {}", self.version())?;
         writeln!(f, "  extent: {}", self.extent())?;
+        match self.keys() {
+            [] => writeln!(f, "  keys: (none)")?,
+            keys => writeln!(f, "  keys: {keys:?}")?,
+        }
         for (index, feature) in self.features().enumerate() {
             writeln!(f, "  feature: {index}")?;
             // Each feature's `Debug` block is already newline-terminated.
