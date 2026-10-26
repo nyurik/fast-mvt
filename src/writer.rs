@@ -545,6 +545,8 @@ mod tests {
     #[test]
     #[cfg(feature = "reader")]
     fn preset_keys_start_the_next_layer_only() {
+        use std::fmt::Write as _;
+
         let mut tile = MvtTileBuilder::new();
         tile.preset_keys(["id", "name", "kind"]);
         let mut feature = tile
@@ -554,46 +556,27 @@ mod tests {
             .unwrap();
         feature.tag("extra", MvtValue::Int(1)).unwrap();
         feature.tag("name", MvtValue::String("a".into())).unwrap();
-        let bytes = feature.end().layer("second").unwrap().encode();
+        let mut feature = feature
+            .end()
+            .layer("second")
+            .unwrap()
+            .feature(&MvtGeometry::Point(point! { x: 3, y: 4 }))
+            .unwrap();
+        feature.tag("name", MvtValue::String("b".into())).unwrap();
+        let bytes = feature.end().encode();
 
-        let reader = crate::MvtReaderRef::new(&bytes).unwrap();
-        let keys: Vec<_> = reader
-            .layers()
-            .map(|layer| (layer.name(), layer.keys()))
-            .collect();
-        insta::assert_debug_snapshot!(keys, @r#"
-        [
-            (
-                "first",
-                [
-                    "id",
-                    "name",
-                    "kind",
-                    "extra",
-                ],
-            ),
-            (
-                "second",
-                [],
-            ),
-        ]
-        "#);
-        insta::assert_debug_snapshot!(reader, @r#"
-        layer: 0
-          name: first
-          version: 2
-          extent: 4096
-          feature: 0
-            id: (none)
-            geometry: POINT(1,2)
-            properties:
-              extra = 1 (int)
-              name = "a"
-        =============================================================
-        layer: 1
-          name: second
-          version: 2
-          extent: 4096
+        let mut dump = String::new();
+        for layer in crate::MvtReaderRef::new(&bytes).unwrap().layers() {
+            writeln!(dump, "{}: keys {:?}", layer.name(), layer.keys()).unwrap();
+            for feature in layer.features() {
+                writeln!(dump, "  {:?}", feature.properties_vec().unwrap()).unwrap();
+            }
+        }
+        insta::assert_snapshot!(dump, @r#"
+        first: keys ["id", "name", "kind", "extra"]
+          [("extra", 1 (int)), ("name", "a")]
+        second: keys ["name"]
+          [("name", "b")]
         "#);
     }
 
