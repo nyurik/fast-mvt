@@ -9,12 +9,12 @@
 //! [`MvtReaderRef`](crate::MvtReaderRef) decodes everything up front.
 //!
 
+use buffa::Enumeration as _;
 use buffa::encoding::{Tag, WireType, check_wire_type, decode_varint, skip_field};
 use buffa::types::{borrow_bytes, borrow_str, decode_int32, decode_uint32, decode_uint64};
-use buffa::{Enumeration as _, MessageView as _};
 use usize_cast::IntoUsize as _;
 
-use super::property::value_ref;
+use super::wire::read_value;
 use crate::generated::vector_tile::tile as proto_tile;
 use crate::geom_reader::decode_geometry;
 use crate::{DEFAULT_EXTENT, MvtError, MvtGeometry, MvtResult, MvtValueRef};
@@ -152,8 +152,7 @@ impl<'a> MvtLazyLayer<'a> {
                 }
                 4 => {
                     check_wire_type(tag, WireType::LengthDelimited)?;
-                    let value = proto_tile::ValueView::decode_view(borrow_bytes(&mut buf)?)?;
-                    layer.values.push(value_ref(&value));
+                    layer.values.push(read_value(borrow_bytes(&mut buf)?)?);
                 }
                 5 => {
                     check_wire_type(tag, WireType::Varint)?;
@@ -367,7 +366,7 @@ impl<'l, 'a> MvtLazyFeature<'l, 'a> {
     /// The geometry commands are malformed.
     pub fn geometry(&self) -> MvtResult<MvtGeometry> {
         let commands = self.geometry_commands().collect::<MvtResult<Vec<_>>>()?;
-        decode_geometry(self.geom_type(), &commands)
+        decode_geometry(self.geom_type(), commands.iter().copied())
     }
 }
 

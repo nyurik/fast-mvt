@@ -4,22 +4,29 @@ use buffa::Enumeration as _;
 use geo_types::{Coord, Geometry, LineString, Point, Polygon};
 
 use super::property::MvtPropertyIter;
+use super::wire::{FeatureData, LayerData, PackedU32, TileData};
 use crate::generated::vector_tile::tile as proto_tile;
 use crate::geom_reader::decode_geometry;
 use crate::{MvtFeature, MvtGeometry, MvtResult, MvtValueRef};
 
 #[derive(Copy, Clone)]
 pub struct MvtFeatureRef<'a> {
-    layer: &'a proto_tile::LayerView<'a>,
-    feature: &'a proto_tile::FeatureView<'a>,
+    tile: &'a TileData<'a>,
+    layer: &'a LayerData<'a>,
+    feature: &'a FeatureData,
 }
 
 impl<'a> MvtFeatureRef<'a> {
     pub(crate) fn new(
-        layer: &'a proto_tile::LayerView<'a>,
-        feature: &'a proto_tile::FeatureView<'a>,
+        tile: &'a TileData<'a>,
+        layer: &'a LayerData<'a>,
+        feature: &'a FeatureData,
     ) -> Self {
-        Self { layer, feature }
+        Self {
+            tile,
+            layer,
+            feature,
+        }
     }
 
     #[must_use]
@@ -27,53 +34,68 @@ impl<'a> MvtFeatureRef<'a> {
         self.feature.id
     }
 
+    /// The raw tag indices. The first call for any feature decodes the tags and geometry of the
+    /// whole tile; [`Self::properties`] reads the tags without that.
     #[must_use]
     pub fn tags(self) -> &'a [u32] {
-        &self.feature.tags
+        self.tile.tags_slice(self.feature)
     }
 
+    /// The raw geometry command stream. The first call for any feature decodes the tags and
+    /// geometry of the whole tile; [`Self::geometry`] reads the geometry without that.
     #[must_use]
     pub fn geometry_commands(self) -> &'a [u32] {
-        &self.feature.geometry
+        self.tile.geometry_slice(self.feature)
     }
 
     #[must_use]
     pub fn geom_type(self) -> Option<proto_tile::GeomType> {
-        self.feature.r#type
+        self.feature.geom_type
     }
 
     #[must_use]
     pub fn geom_type_value(self) -> Option<i32> {
-        self.feature.r#type.map(|v| v.to_i32())
+        self.feature.geom_type.map(|v| v.to_i32())
     }
 
     #[must_use]
     pub fn has_properties(self) -> bool {
-        !self.feature.tags.is_empty()
+        self.feature.has_tags()
+    }
+
+    /// The raw tag indices, read from the tile bytes without decoding the whole tile.
+    pub(crate) fn tag_indices(self) -> PackedU32<'a> {
+        self.tile.tags(self.feature)
     }
 
     #[must_use]
     pub fn properties(self) -> MvtPropertyIter<'a> {
         MvtPropertyIter::new(
-            &self.layer.keys,
-            &self.layer.values,
-            self.feature.tags.chunks(2),
+            self.tile.keys(self.layer),
+            self.tile.values(self.layer),
+            self.tag_indices(),
         )
     }
 
     pub fn properties_vec(self) -> MvtResult<Vec<(&'a str, MvtValueRef<'a>)>> {
-        self.properties().collect()
+        // Collecting into a `Result` loses the size hint, so size the vector up front.
+        let mut properties = Vec::with_capacity(self.properties().len());
+        for property in self.properties() {
+            properties.push(property?);
+        }
+        Ok(properties)
     }
 
     pub fn geometry(self) -> MvtResult<MvtGeometry> {
-        decode_geometry(self.geom_type(), &self.feature.geometry)
+        decode_geometry(self.geom_type(), self.tile.geometry(self.feature))
     }
 
     pub fn to_feature(self) -> MvtResult<MvtFeature> {
-        let properties = self
-            .properties()
-            .map(|property| property.map(|(key, value)| (key.to_string(), value.into_owned())))
-            .collect::<MvtResult<Vec<_>>>()?;
+        let mut properties = Vec::with_capacity(self.properties().len());
+        for property in self.properties() {
+            let (key, value) = property?;
+            properties.push((key.to_string(), value.into_owned()));
+        }
         Ok(MvtFeature {
             id: self.id(),
             geometry: self.geometry()?,
