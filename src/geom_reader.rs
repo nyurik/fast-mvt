@@ -327,12 +327,10 @@ mod tests {
         // A ring turning the other way starts a new polygon.
         let square = [9, 0, 0, 26, 20, 0, 0, 20, 19, 0, 15];
         let reversed = [9, 0, 0, 26, 0, 20, 20, 0, 0, 19, 15];
-        let Geometry::MultiPolygon(multi) = polygons(&[square, reversed, square].concat()).unwrap()
-        else {
-            panic!("expected multipolygon");
-        };
-        assert_eq!(multi.0.len(), 2);
-        assert_eq!(multi.0[0].interiors().len(), 1);
+        assert!(matches!(
+            polygons(&[square, reversed, square].concat()),
+            Ok(Geometry::MultiPolygon(multi)) if multi.0.len() == 2 && multi.0[0].interiors().len() == 1
+        ));
     }
 
     #[test]

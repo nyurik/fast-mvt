@@ -394,13 +394,13 @@ impl<'a> PackedReader<'a> {
 fn check_varints(payload: &[u8]) -> Result<u32, DecodeError> {
     match payload.last() {
         None => return Ok(0),
-        // An unterminated last varint: decoding each one finds the error the generated decoder does.
+        // An unterminated last varint: decoding each one finds the error the generated decoder does,
+        // at the latest when no bytes are left.
         Some(&last) if last >= 0x80 => {
             let mut cur = payload;
-            while !cur.is_empty() {
+            loop {
                 decode_uint32(&mut cur)?;
             }
-            return Err(DecodeError::UnexpectedEof);
         }
         Some(_) => {}
     }
@@ -602,6 +602,27 @@ pub(crate) mod tests {
                         );
                     }
                 }
+            }
+        }
+    }
+
+    /// Length-delimited fields of every length class, whole or cut short, are borrowed as buffa
+    /// borrows them.
+    #[test]
+    fn bytes_are_read_like_borrow_bytes() {
+        for len in [0, 1, 127, 128, 300] {
+            let mut field = Vec::new();
+            encode_uint32(len, &mut field);
+            field.extend(std::iter::repeat_n(7, len.into_usize()));
+            field.push(0);
+            for end in [field.len(), field.len() - 2] {
+                let (mut read, mut borrowed) = (&field[..end], &field[..end]);
+                assert_eq!(
+                    read_bytes(&mut read),
+                    borrow_bytes(&mut borrowed),
+                    "{len} {end}"
+                );
+                assert_eq!(read, borrowed);
             }
         }
     }
