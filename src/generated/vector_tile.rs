@@ -1251,22 +1251,4 @@ pub mod tile {
         from_json: ::buffa::type_registry::any_from_json::<Layer>,
         is_wkt: false,
     };
-    #[cfg(feature = "reader")]
-    #[doc(inline)]
-    pub use super::__buffa::view::tile::ValueView;
-    #[cfg(feature = "reader")]
-    #[doc(inline)]
-    pub use super::__buffa::view::tile::ValueOwnedView;
-    #[cfg(feature = "reader")]
-    #[doc(inline)]
-    pub use super::__buffa::view::tile::FeatureView;
-    #[cfg(feature = "reader")]
-    #[doc(inline)]
-    pub use super::__buffa::view::tile::FeatureOwnedView;
-    #[cfg(feature = "reader")]
-    #[doc(inline)]
-    pub use super::__buffa::view::tile::LayerView;
-    #[cfg(feature = "reader")]
-    #[doc(inline)]
-    pub use super::__buffa::view::tile::LayerOwnedView;
 }
