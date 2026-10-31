@@ -4,13 +4,13 @@
 use std::collections::HashMap as StdHashMap;
 
 use buffa::Enumeration as _;
-use buffa::encoding::varint_len;
+use buffa::encoding::{Tag, WireType, varint_len};
 use buffa::types::{
-    encode_uint32, int32_encoded_len, int64_encoded_len, put_bool_field, put_double_field,
-    put_float_field, put_int32_field, put_int64_field, put_len_delimited_header, put_sint64_field,
-    put_string_field, put_uint32_field, put_uint64_field, sint64_encoded_len, string_encoded_len,
-    uint32_encoded_len, uint64_encoded_len,
+    int32_encoded_len, int64_encoded_len, put_bool_field, put_double_field, put_float_field,
+    put_int32_field, put_int64_field, put_len_delimited_header, put_sint64_field, put_string_field,
+    put_uint32_field, put_uint64_field, sint64_encoded_len, string_encoded_len, uint64_encoded_len,
 };
+use usize_cast::IntoUsize as _;
 
 use crate::generated::vector_tile::tile::GeomType;
 use crate::geom_writer::{GeometryBuf, u32_index};
@@ -25,12 +25,17 @@ type HashMap<K, V> = StdHashMap<K, V, foldhash::fast::RandomState>;
 /// MVT spec version written into every layer.
 const LAYER_VERSION: u32 = 2;
 
+/// The longest a varint can be, kept free for a layer's length until the layer ends.
+const MAX_VARINT_LEN: usize = 10;
+
 #[derive(Debug, Default)]
 pub struct MvtTileBuilder {
     /// The encoded `Tile.layers` fields so far.
     buf: Vec<u8>,
     /// Keys the next layer starts with, in this order, whether or not a feature uses them.
     next_keys: Vec<Box<str>>,
+    /// The state of the last layer, kept so the next one reuses its tables and buffers.
+    spare: Option<Box<LayerState>>,
 }
 
 impl MvtTileBuilder {
@@ -85,12 +90,18 @@ pub(crate) fn encode_tile(tile: &MvtTile) -> MvtResult<Vec<u8>> {
 #[derive(Debug)]
 pub struct MvtLayerBuilder {
     tile: MvtTileBuilder,
+    /// Boxed, so that handing the builder from feature to feature moves a pointer.
+    state: Box<LayerState>,
+}
+
+#[derive(Debug, Default)]
+struct LayerState {
     name: String,
     extent: u32,
-    /// The encoded `Layer.features` fields so far.
-    features: Vec<u8>,
+    /// Where the layer's length goes in the tile buffer, which holds the layer as it is written.
+    start: usize,
     num_features: usize,
-    keys: HashMap<Box<str>, u32>,
+    keys: KeyIndex,
     values: ValueIndex,
     /// The feature being built, kept between features so its buffers are reused.
     feature: FeatureBuf,
@@ -101,7 +112,12 @@ struct FeatureBuf {
     id: Option<u64>,
     geom_type: GeomType,
     tags: Vec<u32>,
+    /// The tags of the previous feature, whose keys the next feature most likely repeats in order.
+    last_tags: Vec<u32>,
     geometry: GeometryBuf,
+    /// The varints of the packed fields, as written.
+    packed_tags: Vec<u8>,
+    packed_geometry: Vec<u8>,
 }
 
 impl MvtLayerBuilder {
@@ -120,41 +136,38 @@ impl MvtLayerBuilder {
     }
 
     fn with_tile(mut tile: MvtTileBuilder, name: String) -> MvtResult<Self> {
-        let mut keys = HashMap::default();
+        let mut state = tile.spare.take().unwrap_or_default();
+        Tag::new(3, WireType::LengthDelimited).encode(&mut tile.buf);
+        state.start = tile.buf.len();
+        tile.buf.extend_from_slice(&[0; MAX_VARINT_LEN]);
+        put_string_field(1, &name, &mut tile.buf);
+        state.name = name;
+        state.extent = DEFAULT_EXTENT.get();
         for key in std::mem::take(&mut tile.next_keys) {
-            let idx = u32_index(keys.len())?;
-            keys.entry(key).or_insert(idx);
+            state.keys.preset(key)?;
         }
-        Ok(Self {
-            tile,
-            name,
-            extent: DEFAULT_EXTENT.get(),
-            features: Vec::new(),
-            num_features: 0,
-            keys,
-            values: ValueIndex::default(),
-            feature: FeatureBuf::default(),
-        })
+        Ok(Self { tile, state })
     }
 
     pub fn extent(&mut self, extent: MvtExtent) -> &mut Self {
-        self.extent = extent.get();
+        self.state.extent = extent.get();
         self
     }
 
     #[must_use]
     pub fn name(&self) -> &str {
-        &self.name
+        &self.state.name
     }
 
     #[must_use]
     pub fn num_features(&self) -> usize {
-        self.num_features
+        self.state.num_features
     }
 
     pub fn feature(mut self, geometry: &MvtGeometry) -> MvtResult<MvtFeatureBuilder> {
-        self.feature.reset();
-        self.feature.geom_type = self.feature.geometry.push_geometry(geometry)?;
+        let feature = &mut self.state.feature;
+        feature.reset();
+        feature.geom_type = feature.geometry.push_geometry(geometry)?;
         Ok(MvtFeatureBuilder { layer: self })
     }
 
@@ -162,8 +175,8 @@ impl MvtLayerBuilder {
     /// [`MvtFeatureBuilder::line`] or [`MvtFeatureBuilder::ring`], straight from its coordinates.
     #[must_use = "call .end() to commit the feature to the layer"]
     pub fn feature_of(mut self, geom_type: MvtGeomType) -> MvtFeatureBuilder {
-        self.feature.reset();
-        self.feature.geom_type = match geom_type {
+        self.state.feature.reset();
+        self.state.feature.geom_type = match geom_type {
             MvtGeomType::Point => GeomType::Point,
             MvtGeomType::LineString => GeomType::Linestring,
             MvtGeomType::Polygon => GeomType::Polygon,
@@ -175,50 +188,35 @@ impl MvtLayerBuilder {
     pub fn end(self) -> MvtTileBuilder {
         let Self {
             mut tile,
-            name,
-            extent,
-            features,
-            keys,
-            values,
-            ..
+            mut state,
         } = self;
-        let mut keys: Vec<_> = keys.into_iter().collect();
-        keys.sort_unstable_by_key(|(_, idx)| *idx);
-        let values = values.into_ordered();
-
-        let len = 1
-            + string_encoded_len(&name)
-            + features.len()
-            + keys
-                .iter()
-                .map(|(key, _)| 1 + string_encoded_len(key))
-                .sum::<usize>()
-            + values
-                .iter()
-                .map(|value| {
-                    let len = value.encoded_len();
-                    1 + varint_len(len as u64) + len
-                })
-                .sum::<usize>()
-            + 1
-            + uint32_encoded_len(extent)
-            + 1
-            + uint32_encoded_len(LAYER_VERSION);
-
         let buf = &mut tile.buf;
-        buf.reserve(len + 10);
-        put_len_delimited_header(3, len as u64, buf);
-        put_string_field(1, &name, buf);
-        buf.extend_from_slice(&features);
-        for (key, _) in &keys {
+        for key in &state.keys.ordered {
             put_string_field(3, key, buf);
         }
-        for value in &values {
+        for value in &state.values.take_ordered() {
             put_len_delimited_header(4, value.encoded_len() as u64, buf);
             value.write(buf);
         }
-        put_uint32_field(5, extent, buf);
+        put_uint32_field(5, state.extent, buf);
         put_uint32_field(15, LAYER_VERSION, buf);
+
+        // The layer's length goes into the room left for it, and the layer moves up to follow it.
+        let body = state.start + MAX_VARINT_LEN;
+        let mut len = (buf.len() - body) as u64;
+        let mut end = state.start;
+        while len >= 0x80 {
+            buf[end] = len.to_le_bytes()[0] | 0x80;
+            len >>= 7;
+            end += 1;
+        }
+        buf[end] = len.to_le_bytes()[0];
+        end += 1;
+        buf.copy_within(body.., end);
+        buf.truncate(buf.len() - (body - end));
+
+        state.clear();
+        tile.spare = Some(state);
         tile
     }
 
@@ -251,30 +249,48 @@ impl MvtLayerBuilder {
             geom_type,
             tags,
             geometry,
-        } = &self.feature;
-        let tags_len = packed_len(tags);
-        let geometry_len = packed_len(&geometry.data);
+            packed_tags,
+            packed_geometry,
+            ..
+        } = &mut self.state.feature;
+        // Packed first, in one pass each, as their lengths come before them.
+        pack_varints(tags, packed_tags);
+        pack_varints(&geometry.data, packed_geometry);
         let len = id.map_or(0, |id| 1 + uint64_encoded_len(id))
-            + packed_field_len(tags_len)
+            + packed_field_len(packed_tags.len())
             + 1
             + int32_encoded_len(geom_type.to_i32())
-            + packed_field_len(geometry_len);
+            + packed_field_len(packed_geometry.len());
 
-        let buf = &mut self.features;
+        let buf = &mut self.tile.buf;
+        buf.reserve(1 + varint_len(len as u64) + len);
         put_len_delimited_header(2, len as u64, buf);
         if let Some(id) = *id {
             put_uint64_field(1, id, buf);
         }
-        put_packed(2, tags, tags_len, buf);
+        put_packed(2, packed_tags, buf);
         put_int32_field(3, geom_type.to_i32(), buf);
-        put_packed(4, &geometry.data, geometry_len, buf);
-        self.num_features += 1;
+        put_packed(4, packed_geometry, buf);
+        self.state.num_features += 1;
+    }
+}
+
+impl LayerState {
+    /// Empties the layer for reuse, keeping the capacity of its tables and buffers.
+    fn clear(&mut self) {
+        self.name.clear();
+        self.num_features = 0;
+        self.keys.indices.clear();
+        self.keys.ordered.clear();
+        self.feature.reset();
+        self.feature.last_tags.clear();
     }
 }
 
 impl FeatureBuf {
     fn reset(&mut self) {
         self.id = None;
+        std::mem::swap(&mut self.tags, &mut self.last_tags);
         self.tags.clear();
         self.geometry.clear();
     }
@@ -289,7 +305,7 @@ pub struct MvtFeatureBuilder {
 
 impl MvtFeatureBuilder {
     pub fn id(&mut self, id: Option<u64>) -> &mut Self {
-        self.layer.feature.id = id;
+        self.layer.state.feature.id = id;
         self
     }
 
@@ -303,16 +319,12 @@ impl MvtFeatureBuilder {
 
     /// Like [`Self::tag`], without allocating for keys and values the layer already has.
     pub fn tag_ref(&mut self, key: &str, value: MvtValueRef<'_>) -> MvtResult<&mut Self> {
-        let layer = &mut self.layer;
+        let layer = &mut *self.layer.state;
         if let Some(value_idx) = layer.values.index(value)? {
-            let key_idx = if let Some(&idx) = layer.keys.get(key) {
-                idx
-            } else {
-                let idx = u32_index(layer.keys.len())?;
-                layer.keys.insert(key.into(), idx);
-                idx
-            };
-            layer.feature.tags.extend([key_idx, value_idx]);
+            let feature = &mut layer.feature;
+            let predicted = feature.last_tags.get(feature.tags.len()).copied();
+            let key_idx = layer.keys.index(key, predicted)?;
+            feature.tags.extend([key_idx, value_idx]);
         }
         Ok(self)
     }
@@ -386,7 +398,7 @@ impl MvtFeatureBuilder {
     }
 
     fn geometry(&mut self, expected: GeomType) -> MvtResult<&mut GeometryBuf> {
-        let feature = &mut self.layer.feature;
+        let feature = &mut self.layer.state.feature;
         if feature.geom_type == expected {
             Ok(&mut feature.geometry)
         } else {
@@ -396,13 +408,54 @@ impl MvtFeatureBuilder {
 
     #[must_use]
     pub fn num_tags(&self) -> usize {
-        self.layer.feature.tags.len() / 2
+        self.layer.state.feature.tags.len() / 2
     }
 
     #[must_use]
     pub fn end(mut self) -> MvtLayerBuilder {
         self.layer.write_feature();
         self.layer
+    }
+}
+
+/// A layer's keys, numbered in the order they first appear.
+#[derive(Debug, Default)]
+struct KeyIndex {
+    indices: HashMap<Box<str>, u32>,
+    /// The keys by index. Layers have few keys, so they are cheap to keep twice.
+    ordered: Vec<Box<str>>,
+}
+
+impl KeyIndex {
+    /// The index of `key`, checking the `predicted` one first, which saves hashing it when right.
+    fn index(&mut self, key: &str, predicted: Option<u32>) -> MvtResult<u32> {
+        if let Some(idx) = predicted {
+            if self
+                .ordered
+                .get(idx.into_usize())
+                .is_some_and(|known| **known == *key)
+            {
+                return Ok(idx);
+            }
+        }
+        if let Some(&idx) = self.indices.get(key) {
+            return Ok(idx);
+        }
+        let idx = u32_index(self.ordered.len())?;
+        self.indices.insert(key.into(), idx);
+        self.ordered.push(key.into());
+        Ok(idx)
+    }
+
+    /// Adds `key` unless the layer already has it, whether or not a feature uses it. Kept apart
+    /// from [`Self::index`], whose only caller it then is, so that it stays inlined there.
+    fn preset(&mut self, key: Box<str>) -> MvtResult<()> {
+        if !self.indices.contains_key(&key) {
+            self.indices
+                .insert(key.clone(), u32_index(self.ordered.len())?);
+            self.ordered.push(key);
+        }
+        Ok(())
     }
 }
 
@@ -447,13 +500,15 @@ impl ValueIndex {
         Ok(Some(*self.scalars.entry(scalar).or_insert(next)))
     }
 
-    fn into_ordered(self) -> Vec<LayerValue> {
-        let mut values: Vec<_> = (self.strings.into_iter())
-            .map(|(value, idx)| (idx, LayerValue::String(value)))
-            .chain((self.scalars.into_iter()).map(|(value, idx)| (idx, LayerValue::Scalar(value))))
-            .collect();
-        values.sort_unstable_by_key(|(idx, _)| *idx);
-        values.into_iter().map(|(_, value)| value).collect()
+    /// The values in index order, leaving the index empty.
+    fn take_ordered(&mut self) -> Vec<LayerValue> {
+        let len = self.strings.len() + self.scalars.len();
+        // Taken rather than drained, so that their tables are freed before the layer is written.
+        let strings = (std::mem::take(&mut self.strings).into_iter())
+            .map(|(value, idx)| (idx, LayerValue::String(value)));
+        let scalars = (std::mem::take(&mut self.scalars).into_iter())
+            .map(|(value, idx)| (idx, LayerValue::Scalar(value)));
+        by_index(len, strings.chain(scalars))
     }
 }
 
@@ -461,6 +516,13 @@ impl ValueIndex {
 enum LayerValue {
     String(Box<str>),
     Scalar(Scalar),
+}
+
+/// A placeholder that does not allocate, for [`by_index`].
+impl Default for LayerValue {
+    fn default() -> Self {
+        Self::Scalar(Scalar::Bool(false))
+    }
 }
 
 impl LayerValue {
@@ -489,8 +551,26 @@ impl LayerValue {
     }
 }
 
-fn packed_len(values: &[u32]) -> usize {
-    values.iter().map(|&v| uint32_encoded_len(v)).sum()
+/// Orders `len` items numbered `0..len` by placing each at its index, which is cheaper than sorting.
+fn by_index<T: Default>(len: usize, items: impl IntoIterator<Item = (u32, T)>) -> Vec<T> {
+    let mut ordered: Vec<T> = std::iter::repeat_with(T::default).take(len).collect();
+    for (idx, item) in items {
+        ordered[idx.into_usize()] = item;
+    }
+    ordered
+}
+
+/// Replaces the contents of `out` with `values` as varints.
+fn pack_varints(values: &[u32], out: &mut Vec<u8>) {
+    out.clear();
+    for &value in values {
+        let mut value = value;
+        while value >= 0x80 {
+            out.push(value.to_le_bytes()[0] | 0x80);
+            value >>= 7;
+        }
+        out.push(value.to_le_bytes()[0]);
+    }
 }
 
 /// The size of a packed field holding `len` bytes, which is not written at all when empty.
@@ -502,12 +582,10 @@ fn packed_field_len(len: usize) -> usize {
     }
 }
 
-fn put_packed(field: u32, values: &[u32], len: usize, buf: &mut Vec<u8>) {
-    if !values.is_empty() {
-        put_len_delimited_header(field, len as u64, buf);
-        for &value in values {
-            encode_uint32(value, buf);
-        }
+fn put_packed(field: u32, packed: &[u8], buf: &mut Vec<u8>) {
+    if !packed.is_empty() {
+        put_len_delimited_header(field, packed.len() as u64, buf);
+        buf.extend_from_slice(packed);
     }
 }
 
@@ -537,7 +615,7 @@ mod tests {
         feature.tag("f", MvtValue::Float(f32::NAN)).unwrap();
 
         assert_eq!(
-            feature.layer.feature.tags,
+            feature.layer.state.feature.tags,
             vec![0, 0, 0, 1, 1, 0, 2, 2, 2, 3, 3, 4, 3, 4]
         );
     }
@@ -546,7 +624,7 @@ mod tests {
     #[cfg(feature = "reader")]
     fn preset_keys_start_the_next_layer_only() {
         let mut tile = MvtTileBuilder::new();
-        tile.preset_keys(["id", "name", "kind"]);
+        tile.preset_keys(["id", "name", "kind", "name"]);
         let mut feature = tile
             .layer("first")
             .unwrap()
@@ -864,12 +942,37 @@ mod tests {
         feature.line([coord]).unwrap();
     }
 
+    #[test]
+    fn packed_varints_match_the_generated_encoding() {
+        let values = [
+            0,
+            1,
+            0x7f,
+            0x80,
+            300,
+            0x3fff,
+            0x4000,
+            0x1f_ffff,
+            0x20_0000,
+            u32::MAX,
+        ];
+        let mut expected = Vec::new();
+        for &value in &values {
+            buffa::types::encode_uint32(value, &mut expected);
+        }
+        let mut packed = vec![0xaa; 3];
+        pack_varints(&values, &mut packed);
+        assert_eq!(packed, expected);
+        pack_varints(&[], &mut packed);
+        assert_eq!(packed, b"");
+    }
+
     /// The `Value` message the layer writes for `value`.
     fn encoded_value(value: &MvtValue) -> Vec<u8> {
         let mut values = ValueIndex::default();
         values.index(value.into()).unwrap();
         let mut buf = Vec::new();
-        for value in values.into_ordered() {
+        for value in values.take_ordered() {
             value.write(&mut buf);
             assert_eq!(buf.len(), value.encoded_len());
         }
