@@ -2,72 +2,75 @@ use std::fmt;
 use std::num::NonZeroU32;
 
 use super::feature::MvtFeatureRef;
-use super::property::value_ref;
-use crate::generated::vector_tile::tile as proto_tile;
+use super::wire::{LayerData, TileData};
 use crate::{DEFAULT_EXTENT, MvtError, MvtLayer, MvtResult, MvtValueRef};
 
 #[derive(Copy, Clone)]
-pub struct MvtLayerRef<'a>(&'a proto_tile::LayerView<'a>);
+pub struct MvtLayerRef<'a> {
+    tile: &'a TileData<'a>,
+    layer: &'a LayerData<'a>,
+}
 
 impl<'a> MvtLayerRef<'a> {
-    pub(crate) fn new(view: &'a proto_tile::LayerView<'a>) -> Self {
-        Self(view)
+    pub(crate) fn new(tile: &'a TileData<'a>, layer: &'a LayerData<'a>) -> Self {
+        Self { tile, layer }
     }
 
     #[must_use]
     pub fn name(self) -> &'a str {
-        self.0.name
+        self.layer.name
     }
 
     #[must_use]
     pub fn version(self) -> u32 {
-        self.0.version
+        self.layer.version
     }
 
     #[must_use]
     pub fn extent(self) -> u32 {
-        self.0.extent.unwrap_or(DEFAULT_EXTENT.get())
+        self.layer.extent.unwrap_or(DEFAULT_EXTENT.get())
     }
 
     #[must_use]
     pub fn feature_count(self) -> usize {
-        self.0.features.len()
+        self.tile.features(self.layer).len()
     }
 
     #[must_use]
     pub fn is_empty(self) -> bool {
-        self.0.features.is_empty()
+        self.tile.features(self.layer).is_empty()
     }
 
     #[must_use]
     pub fn keys(self) -> &'a [&'a str] {
-        &self.0.keys
+        self.tile.keys(self.layer)
     }
 
     pub fn values(self) -> impl ExactSizeIterator<Item = MvtValueRef<'a>> {
-        self.0.values.iter().map(value_ref)
+        self.tile.values(self.layer).iter().copied()
     }
 
     pub fn features(self) -> impl ExactSizeIterator<Item = MvtFeatureRef<'a>> {
-        self.0
-            .features
+        self.tile
+            .features(self.layer)
             .iter()
-            .map(move |feature| MvtFeatureRef::new(self.0, feature))
+            .map(move |feature| MvtFeatureRef::new(self.tile, self.layer, feature))
     }
 
     pub fn to_layer(self) -> MvtResult<MvtLayer> {
-        let extent = match self.0.extent {
+        let extent = match self.layer.extent {
             Some(extent) => NonZeroU32::new(extent).ok_or(MvtError::InvalidExtent)?,
             None => DEFAULT_EXTENT,
         };
-        self.features()
-            .map(MvtFeatureRef::to_feature)
-            .collect::<MvtResult<Vec<_>>>()
-            .map(|features| MvtLayer {
-                name: self.0.name.to_string(),
-                extent,
-                features,
-            })
+        let mut features = Vec::with_capacity(self.feature_count());
+        for feature in self.features() {
+            features.push(feature.to_feature()?);
+        }
+        Ok(MvtLayer {
+            name: self.layer.name.to_string(),
+            extent,
+            features,
+        })
     }
 }
 
@@ -93,7 +96,7 @@ impl fmt::Debug for MvtLayerRef<'_> {
 fn keys_follow_first_use(layer: MvtLayerRef<'_>) -> bool {
     let mut next = 0;
     for feature in layer.features() {
-        for &key in feature.tags().iter().step_by(2) {
+        for key in feature.tag_indices().step_by(2) {
             let key = key as usize;
             if key > next {
                 return false;

@@ -196,8 +196,12 @@ fuzz *args:  (cargo-install 'cargo-fuzz')
     # cargo-fuzz defaults to a musl target, which the sanitizers can't link statically
     cd fuzz && cargo +nightly fuzz run --target "$(rustc +nightly -vV | sed -n 's/^host: //p')" mvt_roundtrip -- {{args}}
 
-# Run the fuzz target for a short while, so CI notices a broken target or an easily found bug
-test-fuzz:  (fuzz '-max_total_time=20')
+# Run the mvt_reader fuzz target on raw tile bytes; extra args go to libFuzzer. Requires nightly toolchain
+fuzz-reader *args:  (cargo-install 'cargo-fuzz')
+    cd fuzz && cargo +nightly fuzz run --target "$(rustc +nightly -vV | sed -n 's/^host: //p')" mvt_reader -- {{args}}
+
+# Run the fuzz targets for a short while, so CI notices a broken target or an easily found bug
+test-fuzz:  (fuzz '-max_total_time=20') (fuzz-reader '-max_total_time=20')
 
 # Test documentation generation
 test-doc:  (docs '')

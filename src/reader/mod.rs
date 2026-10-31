@@ -2,6 +2,7 @@ mod feature;
 mod layer;
 mod property;
 mod tile;
+mod wire;
 
 pub use feature::MvtFeatureRef;
 pub use layer::MvtLayerRef;

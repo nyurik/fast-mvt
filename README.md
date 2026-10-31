@@ -183,12 +183,12 @@ fn encode_tile(layers: &[(&str, MvtGeometry)]) -> MvtResult<Vec<u8>> {
 
 Run with `just bench-decode`:
 
-| Decoder                         | Time     | Throughput  | Compare     |
-|---------------------------------|----------|-------------|-------------|
-| `fast-mvt`                      | 98.4 ms  | 156.6 MiB/s | -           |
-| `tinymvt 0.3.0`                 | 192.0 ms | 80.3 MiB/s  | 2.0x slower |
-| `mvt-reader 2.3.0`              | 600.2 ms | 25.7 MiB/s  | 6.1x slower |
-| `mvt` <br/>decode not supported | n/a      | n/a         | n/a         |
+| Decoder                         | Time     | Throughput  | Compare      |
+|---------------------------------|----------|-------------|--------------|
+| `fast-mvt`                      | 36.1 ms  | 426.8 MiB/s | -            |
+| `tinymvt 0.3.0`                 | 128.1 ms | 120.3 MiB/s | 3.5x slower  |
+| `mvt-reader 2.3.0`              | 458.2 ms | 33.6 MiB/s  | 12.7x slower |
+| `mvt` <br/>decode not supported | n/a      | n/a         | n/a          |
 
 #### Encoding
 
