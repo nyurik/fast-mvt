@@ -102,7 +102,7 @@ _coverage *report_args:  (cargo-install 'cargo-llvm-cov')
     cargo llvm-cov clean --workspace
     # `fuzz` is excluded: `--bins` would run its libFuzzer binary, which never exits
     cargo llvm-cov --no-report --workspace --exclude fuzz --all-features --lib --bins --tests --examples
-    cargo llvm-cov report --include-build-script --ignore-filename-regex 'src/generated/' {{report_args}}
+    cargo llvm-cov report --ignore-filename-regex 'src/generated/|examples/codegen\.rs' {{report_args}}
 
 # jscpd's binstall metadata maps both of its binaries (jscpd and cpd) to the same archive file,
 # so install just the `jscpd` binary, and locate it in the archive by its name
@@ -118,9 +118,9 @@ docs *args='--open':
 # Regenerate protobuf bindings and fail if checked-in output changes
 codegen-check: update-generated assert-git-is-clean
 
-# Refresh generated protobuf bindings and formatting
+# Regenerate the checked-in protobuf bindings from src/vector_tile.proto (needs protoc)
 update-generated:
-    cargo check --features codegen
+    cargo run --example codegen
 
 # Print environment info
 env-info:

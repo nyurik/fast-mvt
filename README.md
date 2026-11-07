@@ -219,11 +219,11 @@ Encoding from an owned tile value. Note that "owned" benchmark includes deep-clo
 | `reader`    | MVT tile decoding from bytes.                                           |
 | `writer`    | MVT tile encoding into bytes.                                           |
 | `json`      | Enable serde JSON support.                                              |
-| `codegen`   | Regenerate checked-in protobuf bindings from `src/vector_tile.proto`.   |
 | `arbitrary` | Derive `arbitrary::Arbitrary` for generated protobuf types for fuzzing. |
 
-The generated protobuf files are checked in, so normal builds do not require
-`protoc`. Run `just update-generated` to refresh generated code after `buffa` upgrades.
+The generated protobuf files are checked in, and no build runs `protoc`. Run
+`just update-generated` (it needs `protoc`) to regenerate them with `examples/codegen.rs`
+after `buffa` upgrades; CI's `just codegen-check` fails if they are stale.
 
 ## Development
 
