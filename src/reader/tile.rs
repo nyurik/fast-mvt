@@ -3,9 +3,10 @@ use std::fmt;
 use buffa::MessageView as _;
 
 use super::MvtLayerRef;
+use super::property::value_ref;
 use crate::generated::vector_tile::{Tile, TileView};
 use crate::types::DEFAULT_EXTENT;
-use crate::{MvtError, MvtResult, MvtTile};
+use crate::{MvtError, MvtResult, MvtTile, MvtValueRef};
 
 impl Tile {
     pub fn from_reader(reader: &MvtReaderRef<'_>) -> MvtResult<Self> {
@@ -18,7 +19,7 @@ impl Tile {
 }
 
 #[derive(Clone)]
-pub struct MvtReaderRef<'a>(TileView<'a>);
+pub struct MvtReaderRef<'a>(TileView<'a>, Vec<Vec<MvtValueRef<'a>>>);
 
 impl<'a> MvtReaderRef<'a> {
     pub fn new(data: &'a [u8]) -> MvtResult<Self> {
@@ -34,11 +35,21 @@ impl<'a> MvtReaderRef<'a> {
                 });
             }
         }
-        Ok(Self(tile))
+        // Each layer's values, resolved once: tags index them for every property read.
+        let values = tile
+            .layers
+            .iter()
+            .map(|layer| layer.values.iter().map(value_ref).collect())
+            .collect();
+        Ok(Self(tile, values))
     }
 
     pub fn layers(&self) -> impl ExactSizeIterator<Item = MvtLayerRef<'_>> {
-        self.0.layers.iter().map(MvtLayerRef::new)
+        self.0
+            .layers
+            .iter()
+            .zip(&self.1)
+            .map(|(layer, values)| MvtLayerRef::new(layer, values))
     }
 
     #[must_use]
@@ -161,10 +172,13 @@ mod tests {
         assert_eq!(feature.id(), Some(7));
         assert!(feature.has_properties());
         assert_eq!(
-            feature.tags(),
+            feature.tags().collect::<Vec<_>>(),
             [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7]
         );
-        assert_eq!(feature.geometry_commands(), [9, 2, 4, 9, 6, 8]);
+        assert_eq!(
+            feature.geometry_commands().collect::<Vec<_>>(),
+            [9, 2, 4, 9, 6, 8]
+        );
         assert_eq!(feature.geom_type(), Some(proto_tile::GeomType::Point));
         assert_eq!(feature.geom_type_value(), Some(1));
 

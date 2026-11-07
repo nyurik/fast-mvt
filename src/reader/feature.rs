@@ -11,15 +11,21 @@ use crate::{MvtFeature, MvtGeometry, MvtResult, MvtValueRef};
 #[derive(Copy, Clone)]
 pub struct MvtFeatureRef<'a> {
     layer: &'a proto_tile::LayerView<'a>,
+    values: &'a [MvtValueRef<'a>],
     feature: &'a proto_tile::FeatureView<'a>,
 }
 
 impl<'a> MvtFeatureRef<'a> {
     pub(crate) fn new(
         layer: &'a proto_tile::LayerView<'a>,
+        values: &'a [MvtValueRef<'a>],
         feature: &'a proto_tile::FeatureView<'a>,
     ) -> Self {
-        Self { layer, feature }
+        Self {
+            layer,
+            values,
+            feature,
+        }
     }
 
     #[must_use]
@@ -27,14 +33,14 @@ impl<'a> MvtFeatureRef<'a> {
         self.feature.id
     }
 
-    #[must_use]
-    pub fn tags(self) -> &'a [u32] {
-        &self.feature.tags
+    /// The tags as key and value index pairs, decoded as they are iterated.
+    pub fn tags(self) -> impl ExactSizeIterator<Item = u32> + Clone + 'a {
+        self.feature.tags.iter()
     }
 
-    #[must_use]
-    pub fn geometry_commands(self) -> &'a [u32] {
-        &self.feature.geometry
+    /// The geometry commands and parameters, decoded as they are iterated.
+    pub fn geometry_commands(self) -> impl ExactSizeIterator<Item = u32> + Clone + 'a {
+        self.feature.geometry.iter()
     }
 
     #[must_use]
@@ -54,11 +60,7 @@ impl<'a> MvtFeatureRef<'a> {
 
     #[must_use]
     pub fn properties(self) -> MvtPropertyIter<'a> {
-        MvtPropertyIter::new(
-            &self.layer.keys,
-            &self.layer.values,
-            self.feature.tags.chunks(2),
-        )
+        MvtPropertyIter::new(&self.layer.keys, self.values, self.feature.tags.iter())
     }
 
     pub fn properties_vec(self) -> MvtResult<Vec<(&'a str, MvtValueRef<'a>)>> {
@@ -66,7 +68,7 @@ impl<'a> MvtFeatureRef<'a> {
     }
 
     pub fn geometry(self) -> MvtResult<MvtGeometry> {
-        decode_geometry(self.geom_type(), &self.feature.geometry)
+        decode_geometry(self.geom_type(), self.feature.geometry.iter())
     }
 
     pub fn to_feature(self) -> MvtResult<MvtFeature> {

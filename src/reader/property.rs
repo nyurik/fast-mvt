@@ -3,19 +3,18 @@ use usize_cast::IntoUsize;
 use crate::generated::vector_tile::tile as proto_tile;
 use crate::{MvtError, MvtResult, MvtValueRef};
 
+/// The tags of a feature, decoded from its packed field as they are iterated.
+type Tags<'a> = buffa::packed_view::PackedIter<'a, buffa::packed_view::Uint32>;
+
 #[derive(Debug, Clone)]
 pub struct MvtPropertyIter<'a> {
     keys: &'a [&'a str],
-    values: &'a [proto_tile::ValueView<'a>],
-    tags: std::slice::Chunks<'a, u32>,
+    values: &'a [MvtValueRef<'a>],
+    tags: Tags<'a>,
 }
 
 impl<'a> MvtPropertyIter<'a> {
-    pub(crate) fn new(
-        keys: &'a [&'a str],
-        values: &'a [proto_tile::ValueView<'a>],
-        tags: std::slice::Chunks<'a, u32>,
-    ) -> Self {
+    pub(crate) fn new(keys: &'a [&'a str], values: &'a [MvtValueRef<'a>], tags: Tags<'a>) -> Self {
         Self { keys, values, tags }
     }
 }
@@ -24,23 +23,23 @@ impl<'a> Iterator for MvtPropertyIter<'a> {
     type Item = MvtResult<(&'a str, MvtValueRef<'a>)>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let pair = self.tags.next()?;
-        let [key_idx, value_idx] = pair else {
-            return Some(Err(MvtError::InvalidTagsLength(pair.len())));
+        let key_idx = self.tags.next()?;
+        let Some(value_idx) = self.tags.next() else {
+            return Some(Err(MvtError::InvalidTagsLength(1)));
         };
-        let key = match self.keys.get((*key_idx).into_usize()) {
+        let key = match self.keys.get(key_idx.into_usize()) {
             Some(key) => *key,
-            None => return Some(Err(MvtError::InvalidKeyIndex(*key_idx))),
+            None => return Some(Err(MvtError::InvalidKeyIndex(key_idx))),
         };
-        let value = match self.values.get((*value_idx).into_usize()) {
-            Some(value) => value_ref(value),
-            None => return Some(Err(MvtError::InvalidValueIndex(*value_idx))),
+        let value = match self.values.get(value_idx.into_usize()) {
+            Some(value) => *value,
+            None => return Some(Err(MvtError::InvalidValueIndex(value_idx))),
         };
         Some(Ok((key, value)))
     }
 }
 
-pub(crate) fn value_ref<'a>(value: &'a proto_tile::ValueView<'a>) -> MvtValueRef<'a> {
+pub(crate) fn value_ref<'a>(value: &proto_tile::ValueView<'a>) -> MvtValueRef<'a> {
     if let Some(value) = value.string_value {
         MvtValueRef::String(value)
     } else if let Some(value) = value.float_value {
