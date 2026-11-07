@@ -36,10 +36,6 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      # protoc is needed to build the comparison crates' protobuf codegen.
-      - uses: taiki-e/install-action@v2.88.1
-        with: { tool: protoc }
-
       - name: Install Valgrind
         run: sudo apt-get update && sudo apt-get install -y valgrind
 
