@@ -131,6 +131,10 @@ jobs:
       - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       - uses: dtolnay/rust-toolchain@stable
+      # cargo-semver-checks builds the last published version with every feature, and up to 0.7.1 the `codegen`
+      # feature ran protoc in build.rs. Remove this step once a version without that feature is published.
+      - uses: taiki-e/install-action@v2.88.1
+        with: { tool: protoc }
       - name: Publish to crates.io if crate's version is newer
         uses: release-plz/action@v0.5.147
         id: release
