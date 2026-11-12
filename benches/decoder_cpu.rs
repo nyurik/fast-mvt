@@ -20,6 +20,7 @@ fn setup(dec: Dec) -> (Dec, Vec<BenchTile>) {
 
 #[library_benchmark(setup = setup)]
 #[bench::fast(Dec::Fast)]
+#[bench::fast_lazy(Dec::FastLazy)]
 #[bench::mvt_reader(Dec::MvtReader)]
 #[bench::tinymvt(Dec::Tiny)]
 fn decode((dec, tiles): (Dec, Vec<BenchTile>)) {
