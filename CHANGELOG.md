@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.3](https://github.com/nyurik/fast-mvt/compare/v0.7.2...v0.7.3) - 2026-11-12
+
+### Added
+
+- *(reader)* add a lazy reader that decodes only what is read ([#68](https://github.com/nyurik/fast-mvt/pull/68))
+
 ## [0.7.2](https://github.com/nyurik/fast-mvt/compare/v0.7.1...v0.7.2) - 2026-11-08
 
 ### Other
