@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.4](https://github.com/nyurik/fast-mvt/compare/v0.7.3...v0.7.4) - 2026-11-13
+
+### Fixed
+
+- make usize_cast a reader-only dependency, fix Rust 1.100 ([#70](https://github.com/nyurik/fast-mvt/pull/70))
+
 ## [0.7.3](https://github.com/nyurik/fast-mvt/compare/v0.7.2...v0.7.3) - 2026-11-12
 
 ### Added
