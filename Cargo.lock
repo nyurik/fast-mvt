@@ -443,7 +443,7 @@ dependencies = [
 
 [[package]]
 name = "fast-mvt"
-version = "0.7.3"
+version = "0.7.4"
 dependencies = [
  "arbitrary",
  "buffa",
