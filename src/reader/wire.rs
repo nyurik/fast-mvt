@@ -266,7 +266,7 @@ impl<'a> TileData<'a> {
 
 /// The value a `Value` message holds, as the first of its fields set in the order they are
 /// declared. A message with no known field set is [`MvtValueRef::Null`].
-fn read_value(buf: &[u8]) -> Result<MvtValueRef<'_>, DecodeError> {
+pub(crate) fn read_value(buf: &[u8]) -> Result<MvtValueRef<'_>, DecodeError> {
     let mut string = None;
     let mut float = None;
     let mut double = None;

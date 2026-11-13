@@ -215,7 +215,7 @@ udeps:  (cargo-install 'cargo-udeps')
     cargo +nightly udeps --workspace --all-features --all-targets
 
 # Update all dependencies, including breaking changes. Requires nightly toolchain (install with `rustup install nightly`)
-update:
+update:  (cargo-install 'cargo-upgrade' 'cargo-edit')
     cargo update
     {{just}} update-generated
 

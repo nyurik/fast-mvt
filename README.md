@@ -54,6 +54,33 @@ fn read_tile(bytes: &[u8]) -> MvtResult<()> {
 }
 ```
 
+### Decoding only what you read
+
+`MvtReaderRef` decodes the whole tile up front. `MvtLazyReader` only finds the
+layers: a layer is decoded when you ask for it, and a feature when you read it.
+Its tags and geometry commands are read from the tile's bytes as you iterate
+them, so a reader that skips layers, or streams the commands into its own
+geometry, allocates only each layer's key and value tables:
+
+```rust
+use fast_mvt::{MvtLazyReader, MvtResult};
+
+fn count_vertices(bytes: &[u8], layer_name: &str) -> MvtResult<usize> {
+    let reader = MvtLazyReader::new(bytes)?;
+    let Some(entry) = reader.layers().find(|entry| entry.name() == layer_name) else {
+        return Ok(0);
+    };
+    let layer = entry.decode()?;
+    let mut vertices = 0;
+    for feature in layer.features() {
+        // MoveTo and LineTo commands are followed by two parameters per vertex.
+        let commands = feature?.geometry_commands().collect::<MvtResult<Vec<u32>>>()?;
+        vertices += commands.len() / 2;
+    }
+    Ok(vertices)
+}
+```
+
 ## Encoding a tile
 
 The simplest path starts a layer with `MvtLayerBuilder::new()`, adds features and
