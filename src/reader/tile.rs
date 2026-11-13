@@ -1,9 +1,10 @@
 use std::fmt;
 
-use buffa::MessageView as _;
+use buffa::DecodeOptions;
 
 use super::MvtLayerRef;
-use crate::generated::vector_tile::{Tile, TileView};
+use super::wire::TileData;
+use crate::generated::vector_tile::Tile;
 use crate::types::DEFAULT_EXTENT;
 use crate::{MvtError, MvtResult, MvtTile};
 
@@ -18,11 +19,11 @@ impl Tile {
 }
 
 #[derive(Clone)]
-pub struct MvtReaderRef<'a>(TileView<'a>);
+pub struct MvtReaderRef<'a>(TileData<'a>);
 
 impl<'a> MvtReaderRef<'a> {
     pub fn new(data: &'a [u8]) -> MvtResult<Self> {
-        let tile = TileView::decode_view(data)?;
+        let tile = TileData::decode(data)?;
         for layer in &tile.layers {
             if layer.name.is_empty() {
                 return Err(MvtError::MissingLayerName);
@@ -38,7 +39,10 @@ impl<'a> MvtReaderRef<'a> {
     }
 
     pub fn layers(&self) -> impl ExactSizeIterator<Item = MvtLayerRef<'_>> {
-        self.0.layers.iter().map(MvtLayerRef::new)
+        self.0
+            .layers
+            .iter()
+            .map(|layer| MvtLayerRef::new(&self.0, layer))
     }
 
     #[must_use]
@@ -55,7 +59,11 @@ impl<'a> MvtReaderRef<'a> {
     }
 
     pub fn to_proto(&self) -> MvtResult<Tile> {
-        Ok(self.0.to_owned_message()?)
+        // The tile was checked when read, within a memory budget for the borrowed form; the owned
+        // one is decoded without a budget of its own, as converting the borrowed form did.
+        Ok(DecodeOptions::new()
+            .with_element_memory_limit(usize::MAX)
+            .decode_from_slice(self.0.data)?)
     }
 }
 
@@ -220,6 +228,14 @@ mod tests {
         let reader = MvtReaderRef::new(&bytes).unwrap();
         let feature = first_feature(&reader);
         assert!(matches!(feature.geometry(), Err(MvtError::InvalidGeometry)));
+    }
+
+    /// More values than the owned decoder's own memory budget admits, as converting a view did.
+    #[test]
+    fn to_proto_is_not_limited_by_the_owned_memory_budget() {
+        let bytes = crate::reader::wire::tests::layer_of_empty_fields(4, 330_000);
+        let reader = MvtReaderRef::new(&bytes).unwrap();
+        assert_eq!(reader.to_proto().unwrap().layers[0].values.len(), 330_000);
     }
 
     #[test]
