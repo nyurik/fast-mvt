@@ -90,7 +90,7 @@ required-features = ["reader", "writer"]
 
 [features]
 default = ["reader", "writer", "json"]
-reader = []
+reader = ["dep:usize_cast"]
 writer = ["dep:foldhash"]
 json = ["dep:serde", "dep:serde_json", "buffa/json"]
 arbitrary = ["dep:arbitrary", "buffa/arbitrary"]
@@ -105,7 +105,7 @@ geo-types.workspace = true
 serde = { workspace = true, features = ["derive"], optional = true }
 serde_json = { workspace = true, optional = true }
 thiserror.workspace = true
-usize_cast.workspace = true
+usize_cast = { workspace = true, optional = true }
 
 [dev-dependencies]
 # For the `codegen` example, which regenerates src/generated (`just update-generated`, needs protoc)
