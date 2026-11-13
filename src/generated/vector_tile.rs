@@ -110,15 +110,15 @@ impl ::buffa::Message for Tile {
 }
 #[cfg(feature = "json")]
 impl ::buffa::json_helpers::ProtoElemJson for Tile {
-    fn serialize_proto_json<S: ::serde::Serializer>(
+    fn serialize_proto_json<__S: ::serde::Serializer>(
         v: &Self,
-        s: S,
-    ) -> ::core::result::Result<S::Ok, S::Error> {
+        s: __S,
+    ) -> ::core::result::Result<__S::Ok, __S::Error> {
         ::serde::Serialize::serialize(v, s)
     }
-    fn deserialize_proto_json<'de, D: ::serde::Deserializer<'de>>(
-        d: D,
-    ) -> ::core::result::Result<Self, D::Error> {
+    fn deserialize_proto_json<'de, __D: ::serde::Deserializer<'de>>(
+        d: __D,
+    ) -> ::core::result::Result<Self, __D::Error> {
         <Self as ::serde::Deserialize>::deserialize(d)
     }
 }
@@ -166,17 +166,17 @@ pub mod tile {
     #[cfg(feature = "json")]
     const _: () = {
         impl ::serde::Serialize for GeomType {
-            fn serialize<S: ::serde::Serializer>(
+            fn serialize<__S: ::serde::Serializer>(
                 &self,
-                s: S,
-            ) -> ::core::result::Result<S::Ok, S::Error> {
+                s: __S,
+            ) -> ::core::result::Result<__S::Ok, __S::Error> {
                 s.serialize_str(::buffa::Enumeration::proto_name(self))
             }
         }
         impl<'de> ::serde::Deserialize<'de> for GeomType {
-            fn deserialize<D: ::serde::Deserializer<'de>>(
-                d: D,
-            ) -> ::core::result::Result<Self, D::Error> {
+            fn deserialize<__D: ::serde::Deserializer<'de>>(
+                d: __D,
+            ) -> ::core::result::Result<Self, __D::Error> {
                 struct _V;
                 impl ::serde::de::Visitor<'_> for _V {
                     type Value = GeomType;
@@ -190,19 +190,22 @@ pub mod tile {
                             ),
                         )
                     }
-                    fn visit_str<E: ::serde::de::Error>(
+                    fn visit_str<__E: ::serde::de::Error>(
                         self,
                         v: &str,
-                    ) -> ::core::result::Result<GeomType, E> {
+                    ) -> ::core::result::Result<GeomType, __E> {
                         <GeomType as ::buffa::Enumeration>::from_proto_name(v)
                             .ok_or_else(|| {
-                                ::serde::de::Error::unknown_variant(v, &[])
+                                ::serde::de::Error::invalid_value(
+                                    ::serde::de::Unexpected::Str(v),
+                                    &"a known enum variant name",
+                                )
                             })
                     }
-                    fn visit_i64<E: ::serde::de::Error>(
+                    fn visit_i64<__E: ::serde::de::Error>(
                         self,
                         v: i64,
-                    ) -> ::core::result::Result<GeomType, E> {
+                    ) -> ::core::result::Result<GeomType, __E> {
                         let v32 = i32::try_from(v)
                             .map_err(|_| {
                                 ::serde::de::Error::custom(
@@ -216,10 +219,10 @@ pub mod tile {
                                 )
                             })
                     }
-                    fn visit_u64<E: ::serde::de::Error>(
+                    fn visit_u64<__E: ::serde::de::Error>(
                         self,
                         v: u64,
-                    ) -> ::core::result::Result<GeomType, E> {
+                    ) -> ::core::result::Result<GeomType, __E> {
                         let v32 = i32::try_from(v)
                             .map_err(|_| {
                                 ::serde::de::Error::custom(
@@ -233,9 +236,9 @@ pub mod tile {
                                 )
                             })
                     }
-                    fn visit_unit<E: ::serde::de::Error>(
+                    fn visit_unit<__E: ::serde::de::Error>(
                         self,
-                    ) -> ::core::result::Result<GeomType, E> {
+                    ) -> ::core::result::Result<GeomType, __E> {
                         ::core::result::Result::Ok(::core::default::Default::default())
                     }
                 }
@@ -243,15 +246,15 @@ pub mod tile {
             }
         }
         impl ::buffa::json_helpers::ProtoElemJson for GeomType {
-            fn serialize_proto_json<S: ::serde::Serializer>(
+            fn serialize_proto_json<__S: ::serde::Serializer>(
                 v: &Self,
-                s: S,
-            ) -> ::core::result::Result<S::Ok, S::Error> {
+                s: __S,
+            ) -> ::core::result::Result<__S::Ok, __S::Error> {
                 ::serde::Serialize::serialize(v, s)
             }
-            fn deserialize_proto_json<'de, D: ::serde::Deserializer<'de>>(
-                d: D,
-            ) -> ::core::result::Result<Self, D::Error> {
+            fn deserialize_proto_json<'de, __D: ::serde::Deserializer<'de>>(
+                d: __D,
+            ) -> ::core::result::Result<Self, __D::Error> {
                 <Self as ::serde::Deserialize>::deserialize(d)
             }
         }
@@ -401,7 +404,7 @@ pub mod tile {
         ///Sets [`Self::string_value`] to `Some(value)`, consuming and returning `self`.
         pub fn with_string_value(
             mut self,
-            value: impl Into<::buffa::alloc::string::String>,
+            value: impl ::core::convert::Into<::buffa::alloc::string::String>,
         ) -> Self {
             self.string_value = Some(value.into());
             self
@@ -616,15 +619,15 @@ pub mod tile {
     }
     #[cfg(feature = "json")]
     impl ::buffa::json_helpers::ProtoElemJson for Value {
-        fn serialize_proto_json<S: ::serde::Serializer>(
+        fn serialize_proto_json<__S: ::serde::Serializer>(
             v: &Self,
-            s: S,
-        ) -> ::core::result::Result<S::Ok, S::Error> {
+            s: __S,
+        ) -> ::core::result::Result<__S::Ok, __S::Error> {
             ::serde::Serialize::serialize(v, s)
         }
-        fn deserialize_proto_json<'de, D: ::serde::Deserializer<'de>>(
-            d: D,
-        ) -> ::core::result::Result<Self, D::Error> {
+        fn deserialize_proto_json<'de, __D: ::serde::Deserializer<'de>>(
+            d: __D,
+        ) -> ::core::result::Result<Self, __D::Error> {
             <Self as ::serde::Deserialize>::deserialize(d)
         }
     }
@@ -662,8 +665,8 @@ pub mod tile {
             feature = "json",
             serde(
                 rename = "tags",
-                skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_vec",
-                deserialize_with = "::buffa::json_helpers::null_as_default"
+                with = "::buffa::json_helpers::proto_seq",
+                skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_vec"
             )
         )]
         pub tags: ::buffa::alloc::vec::Vec<u32>,
@@ -688,8 +691,8 @@ pub mod tile {
             feature = "json",
             serde(
                 rename = "geometry",
-                skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_vec",
-                deserialize_with = "::buffa::json_helpers::null_as_default"
+                with = "::buffa::json_helpers::proto_seq",
+                skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_vec"
             )
         )]
         pub geometry: ::buffa::alloc::vec::Vec<u32>,
@@ -722,7 +725,10 @@ pub mod tile {
         #[must_use = "with_* setters return `self` by value; assign or chain the result"]
         #[inline]
         ///Sets `type` to `Some(value)`, consuming and returning `self`.
-        pub fn with_type(mut self, value: impl Into<super::tile::GeomType>) -> Self {
+        pub fn with_type(
+            mut self,
+            value: impl ::core::convert::Into<super::tile::GeomType>,
+        ) -> Self {
             self.r#type = Some(value.into());
             self
         }
@@ -934,15 +940,15 @@ pub mod tile {
     }
     #[cfg(feature = "json")]
     impl ::buffa::json_helpers::ProtoElemJson for Feature {
-        fn serialize_proto_json<S: ::serde::Serializer>(
+        fn serialize_proto_json<__S: ::serde::Serializer>(
             v: &Self,
-            s: S,
-        ) -> ::core::result::Result<S::Ok, S::Error> {
+            s: __S,
+        ) -> ::core::result::Result<__S::Ok, __S::Error> {
             ::serde::Serialize::serialize(v, s)
         }
-        fn deserialize_proto_json<'de, D: ::serde::Deserializer<'de>>(
-            d: D,
-        ) -> ::core::result::Result<Self, D::Error> {
+        fn deserialize_proto_json<'de, __D: ::serde::Deserializer<'de>>(
+            d: __D,
+        ) -> ::core::result::Result<Self, __D::Error> {
             <Self as ::serde::Deserialize>::deserialize(d)
         }
     }
@@ -1231,15 +1237,15 @@ pub mod tile {
     }
     #[cfg(feature = "json")]
     impl ::buffa::json_helpers::ProtoElemJson for Layer {
-        fn serialize_proto_json<S: ::serde::Serializer>(
+        fn serialize_proto_json<__S: ::serde::Serializer>(
             v: &Self,
-            s: S,
-        ) -> ::core::result::Result<S::Ok, S::Error> {
+            s: __S,
+        ) -> ::core::result::Result<__S::Ok, __S::Error> {
             ::serde::Serialize::serialize(v, s)
         }
-        fn deserialize_proto_json<'de, D: ::serde::Deserializer<'de>>(
-            d: D,
-        ) -> ::core::result::Result<Self, D::Error> {
+        fn deserialize_proto_json<'de, __D: ::serde::Deserializer<'de>>(
+            d: __D,
+        ) -> ::core::result::Result<Self, __D::Error> {
             <Self as ::serde::Deserialize>::deserialize(d)
         }
     }

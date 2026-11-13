@@ -155,6 +155,7 @@ impl<'a> ::buffa::MessageName for TileView<'a> {
 }
 ::buffa::impl_default_view_instance!(TileView);
 ::buffa::impl_view_reborrow!(TileView);
+::buffa::unsafe_impl_view_lifetime_parametric!(TileView);
 /** Self-contained, `'static` owned view of a `Tile` message.
 
  Wraps [`::buffa::OwnedView`]`<`[`TileView`]`<'static>>`: the decoded view and the [`::buffa::bytes::Bytes`] buffer it borrows from travel together, so the handle is `'static` and `Send + Sync` — suitable for async handlers, spawned tasks, and anywhere a `'static` bound is required.
@@ -540,6 +541,7 @@ pub mod tile {
     }
     ::buffa::impl_default_view_instance!(ValueView);
     ::buffa::impl_view_reborrow!(ValueView);
+    ::buffa::unsafe_impl_view_lifetime_parametric!(ValueView);
     /** Self-contained, `'static` owned view of a `Value` message.
 
  Wraps [`::buffa::OwnedView`]`<`[`ValueView`]`<'static>>`: the decoded view and the [`::buffa::bytes::Bytes`] buffer it borrows from travel together, so the handle is `'static` and `Send + Sync` — suitable for async handlers, spawned tasks, and anywhere a `'static` bound is required.
@@ -700,7 +702,7 @@ pub mod tile {
         /// 4.2 and 4.4 of the specification
         ///
         /// Field 2: `tags`
-        pub tags: ::buffa::RepeatedView<'a, u32>,
+        pub tags: ::buffa::PackedView<'a, ::buffa::packed_view::Uint32>,
         /// The type of geometry stored in this feature.
         ///
         /// Field 3: `type`
@@ -710,7 +712,7 @@ pub mod tile {
         /// section 4.3 of the specification.
         ///
         /// Field 4: `geometry`
-        pub geometry: ::buffa::RepeatedView<'a, u32>,
+        pub geometry: ::buffa::PackedView<'a, ::buffa::packed_view::Uint32>,
     }
     impl<'a> ::buffa::MessageView<'a> for FeatureView<'a> {
         type Owned = super::super::super::tile::Feature;
@@ -766,11 +768,7 @@ pub mod tile {
                 2u32 => {
                     if tag.wire_type() == ::buffa::encoding::WireType::LengthDelimited {
                         let payload = ::buffa::types::borrow_bytes(&mut cur)?;
-                        ::buffa::types::extend_packed_uint32(
-                            payload,
-                            view.tags.as_mut_vec(),
-                            ::buffa::encoding::count_varints(payload),
-                        )?;
+                        view.tags.extend_packed(payload)?;
                     } else if tag.wire_type() == ::buffa::encoding::WireType::Varint {
                         view.tags.push(::buffa::types::decode_uint32(&mut cur)?);
                     } else {
@@ -785,11 +783,7 @@ pub mod tile {
                 4u32 => {
                     if tag.wire_type() == ::buffa::encoding::WireType::LengthDelimited {
                         let payload = ::buffa::types::borrow_bytes(&mut cur)?;
-                        ::buffa::types::extend_packed_uint32(
-                            payload,
-                            view.geometry.as_mut_vec(),
-                            ::buffa::encoding::count_varints(payload),
-                        )?;
+                        view.geometry.extend_packed(payload)?;
                     } else if tag.wire_type() == ::buffa::encoding::WireType::Varint {
                         view.geometry.push(::buffa::types::decode_uint32(&mut cur)?);
                     } else {
@@ -845,23 +839,15 @@ pub mod tile {
                 size += 1u64 + ::buffa::types::uint64_encoded_len(v) as u64;
             }
             if !self.tags.is_empty() {
-                let payload: u64 = self
-                    .tags
-                    .iter()
-                    .map(|&v| ::buffa::types::uint32_encoded_len(v) as u64)
-                    .sum::<u64>();
-                size += 1u64 + ::buffa::encoding::varint_len(payload) as u64 + payload;
+                let __n = self.tags.packed_len() as u64;
+                size += 1u64 + ::buffa::encoding::varint_len(__n) as u64 + __n;
             }
             if let Some(ref v) = self.r#type {
                 size += 1u64 + ::buffa::types::int32_encoded_len(v.to_i32()) as u64;
             }
             if !self.geometry.is_empty() {
-                let payload: u64 = self
-                    .geometry
-                    .iter()
-                    .map(|&v| ::buffa::types::uint32_encoded_len(v) as u64)
-                    .sum::<u64>();
-                size += 1u64 + ::buffa::encoding::varint_len(payload) as u64 + payload;
+                let __n = self.geometry.packed_len() as u64;
+                size += 1u64 + ::buffa::encoding::varint_len(__n) as u64 + __n;
             }
             ::buffa::saturate_size(size)
         }
@@ -877,29 +863,23 @@ pub mod tile {
                 ::buffa::types::put_uint64_field(1u32, v, buf);
             }
             if !self.tags.is_empty() {
-                let payload: u64 = self
-                    .tags
-                    .iter()
-                    .map(|&v| ::buffa::types::uint32_encoded_len(v) as u64)
-                    .sum::<u64>();
-                ::buffa::types::put_len_delimited_header(2u32, payload, buf);
-                for &v in &self.tags {
-                    ::buffa::types::encode_uint32(v, buf);
-                }
+                ::buffa::types::put_len_delimited_header(
+                    2u32,
+                    self.tags.packed_len() as u64,
+                    buf,
+                );
+                self.tags.write_packed(buf);
             }
             if let Some(ref v) = self.r#type {
                 ::buffa::types::put_int32_field(3u32, v.to_i32(), buf);
             }
             if !self.geometry.is_empty() {
-                let payload: u64 = self
-                    .geometry
-                    .iter()
-                    .map(|&v| ::buffa::types::uint32_encoded_len(v) as u64)
-                    .sum::<u64>();
-                ::buffa::types::put_len_delimited_header(4u32, payload, buf);
-                for &v in &self.geometry {
-                    ::buffa::types::encode_uint32(v, buf);
-                }
+                ::buffa::types::put_len_delimited_header(
+                    4u32,
+                    self.geometry.packed_len() as u64,
+                    buf,
+                );
+                self.geometry.write_packed(buf);
             }
         }
     }
@@ -929,7 +909,7 @@ pub mod tile {
                 __map
                     .serialize_entry(
                         "tags",
-                        &::buffa::json_helpers::RepeatedJson(&self.tags),
+                        &::buffa::json_helpers::RepeatedJson(&self.tags.to_vec()),
                     )?;
             }
             if let ::core::option::Option::Some(__v) = self.r#type {
@@ -943,7 +923,7 @@ pub mod tile {
                 __map
                     .serialize_entry(
                         "geometry",
-                        &::buffa::json_helpers::RepeatedJson(&self.geometry),
+                        &::buffa::json_helpers::RepeatedJson(&self.geometry.to_vec()),
                     )?;
             }
             __map.end()
@@ -957,6 +937,7 @@ pub mod tile {
     }
     ::buffa::impl_default_view_instance!(FeatureView);
     ::buffa::impl_view_reborrow!(FeatureView);
+    ::buffa::unsafe_impl_view_lifetime_parametric!(FeatureView);
     /** Self-contained, `'static` owned view of a `Feature` message.
 
  Wraps [`::buffa::OwnedView`]`<`[`FeatureView`]`<'static>>`: the decoded view and the [`::buffa::bytes::Bytes`] buffer it borrows from travel together, so the handle is `'static` and `Send + Sync` — suitable for async handlers, spawned tasks, and anywhere a `'static` bound is required.
@@ -1049,7 +1030,7 @@ pub mod tile {
         ///
         /// Field 2: `tags`
         #[must_use]
-        pub fn tags(&self) -> &::buffa::RepeatedView<'_, u32> {
+        pub fn tags(&self) -> &::buffa::PackedView<'_, ::buffa::packed_view::Uint32> {
             &self.0.reborrow().tags
         }
         /// The type of geometry stored in this feature.
@@ -1067,7 +1048,9 @@ pub mod tile {
         ///
         /// Field 4: `geometry`
         #[must_use]
-        pub fn geometry(&self) -> &::buffa::RepeatedView<'_, u32> {
+        pub fn geometry(
+            &self,
+        ) -> &::buffa::PackedView<'_, ::buffa::packed_view::Uint32> {
             &self.0.reborrow().geometry
         }
     }
@@ -1427,6 +1410,7 @@ Distinguishes a field that was absent from one explicitly encoded with its defau
     }
     ::buffa::impl_default_view_instance!(LayerView);
     ::buffa::impl_view_reborrow!(LayerView);
+    ::buffa::unsafe_impl_view_lifetime_parametric!(LayerView);
     /** Self-contained, `'static` owned view of a `Layer` message.
 
  Wraps [`::buffa::OwnedView`]`<`[`LayerView`]`<'static>>`: the decoded view and the [`::buffa::bytes::Bytes`] buffer it borrows from travel together, so the handle is `'static` and `Send + Sync` — suitable for async handlers, spawned tasks, and anywhere a `'static` bound is required.

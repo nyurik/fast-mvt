@@ -126,3 +126,8 @@ debug = true
 
 [lints]
 workspace = true
+
+# buffa with borrowed packed varint fields in views (anthropics/buffa#814), until released.
+[patch.crates-io]
+buffa = { git = "https://github.com/nyurik/buffa", branch = "packed-views" }
+buffa-build = { git = "https://github.com/nyurik/buffa", branch = "packed-views" }

@@ -2,16 +2,15 @@ use std::fmt;
 use std::num::NonZeroU32;
 
 use super::feature::MvtFeatureRef;
-use super::property::value_ref;
 use crate::generated::vector_tile::tile as proto_tile;
 use crate::{DEFAULT_EXTENT, MvtError, MvtLayer, MvtResult, MvtValueRef};
 
 #[derive(Copy, Clone)]
-pub struct MvtLayerRef<'a>(&'a proto_tile::LayerView<'a>);
+pub struct MvtLayerRef<'a>(&'a proto_tile::LayerView<'a>, &'a [MvtValueRef<'a>]);
 
 impl<'a> MvtLayerRef<'a> {
-    pub(crate) fn new(view: &'a proto_tile::LayerView<'a>) -> Self {
-        Self(view)
+    pub(crate) fn new(view: &'a proto_tile::LayerView<'a>, values: &'a [MvtValueRef<'a>]) -> Self {
+        Self(view, values)
     }
 
     #[must_use]
@@ -45,14 +44,14 @@ impl<'a> MvtLayerRef<'a> {
     }
 
     pub fn values(self) -> impl ExactSizeIterator<Item = MvtValueRef<'a>> {
-        self.0.values.iter().map(value_ref)
+        self.1.iter().copied()
     }
 
     pub fn features(self) -> impl ExactSizeIterator<Item = MvtFeatureRef<'a>> {
         self.0
             .features
             .iter()
-            .map(move |feature| MvtFeatureRef::new(self.0, feature))
+            .map(move |feature| MvtFeatureRef::new(self.0, self.1, feature))
     }
 
     pub fn to_layer(self) -> MvtResult<MvtLayer> {
@@ -93,7 +92,7 @@ impl fmt::Debug for MvtLayerRef<'_> {
 fn keys_follow_first_use(layer: MvtLayerRef<'_>) -> bool {
     let mut next = 0;
     for feature in layer.features() {
-        for &key in feature.tags().iter().step_by(2) {
+        for key in feature.tags().step_by(2) {
             let key = key as usize;
             if key > next {
                 return false;

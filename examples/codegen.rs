@@ -17,6 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .gate_impls_on_crate_features(true)
         .preserve_unknown_fields(false)
         .views_feature_name("reader")
+        .packed_views(true)
         .compile()?;
     Ok(())
 }

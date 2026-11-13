@@ -131,8 +131,7 @@ checksum = "3ded4057c258ba199e2d26386d3af3780957ecaee6c4ef4041c6b4b8b97c0b06"
 [[package]]
 name = "buffa"
 version = "0.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a92f2f5df67a9d5ccfc65237bfc954c56328aee40a04a9b92381ecba370be246"
+source = "git+https://github.com/nyurik/buffa?branch=packed-views#f1d3636f7a687fce3429c5174af27efcbcafb845"
 dependencies = [
  "arbitrary",
  "base64",
@@ -150,8 +149,7 @@ dependencies = [
 [[package]]
 name = "buffa-build"
 version = "0.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eee6b6b4a8d23f1f98a043f188f4d9d2ef8bee43191f42e93ac577f3c3b0f334"
+source = "git+https://github.com/nyurik/buffa?branch=packed-views#f1d3636f7a687fce3429c5174af27efcbcafb845"
 dependencies = [
  "buffa",
  "buffa-codegen",
@@ -161,8 +159,7 @@ dependencies = [
 [[package]]
 name = "buffa-codegen"
 version = "0.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb4bea10ef85ea3d06a20412c67cb612527feb25f33367eab850139441fb5dd9"
+source = "git+https://github.com/nyurik/buffa?branch=packed-views#f1d3636f7a687fce3429c5174af27efcbcafb845"
 dependencies = [
  "buffa",
  "buffa-descriptor",
@@ -176,8 +173,7 @@ dependencies = [
 [[package]]
 name = "buffa-descriptor"
 version = "0.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b7dd79a6898e70dac8adae959c8ad2cae51ed96397935c91c996280cedcb55e"
+source = "git+https://github.com/nyurik/buffa?branch=packed-views#f1d3636f7a687fce3429c5174af27efcbcafb845"
 dependencies = [
  "buffa",
  "rustversion",
