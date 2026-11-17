@@ -18,13 +18,19 @@ fn setup(dec: Dec) -> (Dec, Vec<BenchTile>) {
     (dec, load_repo_mvt_files(true))
 }
 
-#[library_benchmark(setup = setup)]
+#[library_benchmark(setup = setup, teardown = teardown)]
 #[bench::fast(Dec::Fast)]
 #[bench::fast_lazy(Dec::FastLazy)]
 #[bench::mvt_reader(Dec::MvtReader)]
 #[bench::tinymvt(Dec::Tiny)]
-fn decode((dec, tiles): (Dec, Vec<BenchTile>)) {
+fn decode((dec, tiles): (Dec, Vec<BenchTile>)) -> Vec<BenchTile> {
     common::decode::run(dec, &tiles);
+    tiles
+}
+
+/// Drops the fixture tiles outside the instruction count.
+fn teardown(tiles: Vec<BenchTile>) {
+    drop(tiles);
 }
 
 library_benchmark_group!(name = decoder_cpu, benchmarks = [decode]);

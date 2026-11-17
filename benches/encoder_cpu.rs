@@ -18,15 +18,21 @@ fn setup(enc: Enc) -> (Enc, Vec<BenchTile>) {
     (enc, load_repo_mvt_files(false))
 }
 
-#[library_benchmark(setup = setup)]
+#[library_benchmark(setup = setup, teardown = teardown)]
 #[bench::fast(Enc::Fast)]
 #[bench::fast_owned(Enc::FastOwned)]
 #[bench::mvt(Enc::Mvt)]
 #[bench::mvt_owned(Enc::MvtOwned)]
 #[bench::tinymvt(Enc::Tiny)]
 #[bench::tinymvt_owned(Enc::TinyOwned)]
-fn encode((enc, tiles): (Enc, Vec<BenchTile>)) {
+fn encode((enc, tiles): (Enc, Vec<BenchTile>)) -> Vec<BenchTile> {
     common::encode::run(enc, &tiles);
+    tiles
+}
+
+/// Drops the fixture tiles outside the instruction count.
+fn teardown(tiles: Vec<BenchTile>) {
+    drop(tiles);
 }
 
 library_benchmark_group!(name = encoder_cpu, benchmarks = [encode]);
