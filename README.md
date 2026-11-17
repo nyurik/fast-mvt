@@ -239,6 +239,25 @@ Encoding from an owned tile value. Note that "owned" benchmark includes deep-clo
 | `mvt 0.15.0`                           | 32.8 ms | 26.1 MiB/s | 2.2x slower |
 | `mvt-reader` <br/>encode not supported | n/a     | n/a        | n/a         |
 
+#### CPU instructions
+
+Run with `just bench-cpu`, which needs Valgrind and `gungraun-runner`. It counts the CPU instructions of the same
+work as the tables above with Callgrind, which is deterministic, unlike the time. Measured on x86-64 Linux with Rust
+1.100.
+
+| Decoder              | Instructions | Compare   |
+|----------------------|--------------|-----------|
+| `fast-mvt`           | 867 M        | -         |
+| `fast-mvt`, lazy     | 868 M        | 1.0x      |
+| `tinymvt 0.3.0`      | 1,696 M      | 2.0x more |
+| `mvt-reader 2.3.0`   | 4,432 M      | 5.1x more |
+
+| Encoder         | From a parsed tile | Compare   | From an owned tile | Compare   |
+|-----------------|--------------------|-----------|--------------------|-----------|
+| `fast-mvt`      | 63.1 M             | -         | 133.2 M            | -         |
+| `tinymvt 0.3.0` | 113.6 M            | 1.8x more | 184.0 M            | 1.4x more |
+| `mvt 0.15.0`    | 202.5 M            | 3.2x more | 272.4 M            | 2.0x more |
+
 ## Features
 
 | Feature     | Purpose                                                                 |
