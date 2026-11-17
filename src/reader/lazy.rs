@@ -9,10 +9,9 @@
 //! [`MvtReaderRef`](crate::MvtReaderRef) decodes everything up front.
 //!
 
-use buffa::Enumeration as _;
-use buffa::MessageView as _;
 use buffa::encoding::{Tag, WireType, check_wire_type, decode_varint, skip_field};
 use buffa::types::{borrow_bytes, borrow_str, decode_int32, decode_uint32, decode_uint64};
+use buffa::{Enumeration as _, MessageView as _};
 use usize_cast::IntoUsize as _;
 
 use super::property::value_ref;
