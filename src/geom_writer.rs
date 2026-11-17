@@ -1,3 +1,5 @@
+use buffa::encoding::encode_varint;
+
 use crate::generated::vector_tile::tile::GeomType;
 use crate::geom::{Command, signed_area};
 use crate::{MvtCoord, MvtError, MvtGeometry, MvtPolygon, MvtResult};
@@ -9,7 +11,8 @@ pub(crate) fn encode_parameter(value: i32) -> u32 {
 /// The geometry commands of one feature. Kept from feature to feature so its buffers are reused.
 #[derive(Debug, Default)]
 pub(crate) struct GeometryBuf {
-    pub(crate) data: Vec<u32>,
+    /// The commands and parameters as varints, which is how the packed field holds them.
+    pub(crate) data: Vec<u8>,
     cursor: MvtCoord,
     /// A ring given as an iterator, gathered to check its winding.
     ring: Vec<MvtCoord>,
@@ -84,6 +87,8 @@ impl GeometryBuf {
         command: Command,
         coords: impl IntoIterator<Item = MvtCoord>,
     ) -> MvtResult<()> {
+        // One byte is kept for the command word, enough for up to 15 coordinates; for more, the
+        // coordinates are moved up to make room for it.
         let start = self.data.len();
         self.data.push(0);
         let mut count = 0_usize;
@@ -94,7 +99,17 @@ impl GeometryBuf {
         if count == 0 {
             self.data.truncate(start);
         } else {
-            self.data[start] = command.encode(u32_index(count)?)?;
+            let word = command.encode(u32_index(count)?)?;
+            match u8::try_from(word) {
+                Ok(byte) if byte < 0x80 => self.data[start] = byte,
+                _ => {
+                    let mut bytes = [0; 5];
+                    let mut sink = &mut bytes[..];
+                    encode_varint(u64::from(word), &mut sink);
+                    let len = 5 - sink.len();
+                    self.data.splice(start..=start, bytes.into_iter().take(len));
+                }
+            }
         }
         Ok(())
     }
@@ -128,25 +143,33 @@ impl GeometryBuf {
         }
         let area = signed_area(coords);
         let reverse = area != 0 && (area > 0) != exterior;
-        self.data.push(Command::MoveTo.encode(1)?);
+        // Each coordinate takes two varints, mostly a byte each.
+        self.data.reserve(coords.len() * 2 + 8);
+        self.push_varint(Command::MoveTo.encode(1)?);
         self.push_delta(ring_coord(coords, 0, reverse));
         if coords.len() > 1 {
-            self.data
-                .push(Command::LineTo.encode(u32_index(coords.len() - 1)?)?);
+            self.push_varint(Command::LineTo.encode(u32_index(coords.len() - 1)?)?);
             for idx in 1..coords.len() {
                 self.push_delta(ring_coord(coords, idx, reverse));
             }
         }
-        self.data.push(Command::ClosePath.encode(1)?);
+        self.push_varint(Command::ClosePath.encode(1)?);
         Ok(())
     }
 
+    #[expect(
+        clippy::inline_always,
+        reason = "left out of line by plain `#[inline]`, a call per coordinate costing 6% of encoding"
+    )]
+    #[inline(always)]
     fn push_delta(&mut self, coord: MvtCoord) {
-        self.data
-            .push(encode_parameter(coord.x.saturating_sub(self.cursor.x)));
-        self.data
-            .push(encode_parameter(coord.y.saturating_sub(self.cursor.y)));
+        self.push_varint(encode_parameter(coord.x.saturating_sub(self.cursor.x)));
+        self.push_varint(encode_parameter(coord.y.saturating_sub(self.cursor.y)));
         self.cursor = coord;
+    }
+
+    fn push_varint(&mut self, value: u32) {
+        encode_varint(u64::from(value), &mut self.data);
     }
 }
 
@@ -182,7 +205,28 @@ mod tests {
     fn encode_geometry(geometry: &MvtGeometry) -> MvtResult<(GeomType, Vec<u32>)> {
         let mut buf = GeometryBuf::default();
         let geom_type = buf.push_geometry(geometry)?;
-        Ok((geom_type, buf.data))
+        Ok((geom_type, unpack(&buf.data)))
+    }
+
+    /// The values of packed varints.
+    fn unpack(mut bytes: &[u8]) -> Vec<u32> {
+        let mut values = Vec::new();
+        while !bytes.is_empty() {
+            values
+                .push(u32::try_from(buffa::encoding::decode_varint(&mut bytes).unwrap()).unwrap());
+        }
+        values
+    }
+
+    #[test]
+    fn long_commands_make_room_for_their_word() {
+        let coords: Vec<_> = (0..20).map(|x| MvtCoord { x, y: 0 }).collect();
+        let mut geometry = GeometryBuf::default();
+        geometry.points(coords.iter().copied()).unwrap();
+        let values = unpack(&geometry.data);
+        assert_eq!(values[0], Command::MoveTo.encode(20).unwrap());
+        assert_eq!(values.len(), 41);
+        assert_eq!(&values[1..5], &[0, 0, 2, 0]);
     }
 
     #[test]
@@ -277,7 +321,7 @@ mod tests {
         // No points is no geometry.
         let mut geometry = GeometryBuf::default();
         geometry.points(std::iter::empty::<MvtCoord>()).unwrap();
-        assert_eq!(geometry.data, Vec::<u32>::new());
+        assert_eq!(geometry.data, Vec::<u8>::new());
         // Single-vertex line and ring skip the `LineTo` branch.
         encode_geometry(&MvtGeometry::LineString(line_string![(x: 1, y: 2)])).unwrap();
         encode_geometry(&MvtGeometry::Polygon(polygon![(x: 1, y: 2)])).unwrap();

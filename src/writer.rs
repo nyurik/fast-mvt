@@ -253,7 +253,8 @@ impl MvtLayerBuilder {
             geometry,
         } = &self.feature;
         let tags_len = packed_len(tags);
-        let geometry_len = packed_len(&geometry.data);
+        // The geometry is held as its packed varints already.
+        let geometry_len = geometry.data.len();
         let len = id.map_or(0, |id| 1 + uint64_encoded_len(id))
             + packed_field_len(tags_len)
             + 1
@@ -267,7 +268,10 @@ impl MvtLayerBuilder {
         }
         put_packed(2, tags, tags_len, buf);
         put_int32_field(3, geom_type.to_i32(), buf);
-        put_packed(4, &geometry.data, geometry_len, buf);
+        if geometry_len != 0 {
+            put_len_delimited_header(4, geometry_len as u64, buf);
+            buf.extend_from_slice(&geometry.data);
+        }
         self.num_features += 1;
     }
 }
@@ -587,6 +591,29 @@ mod tests {
             properties:
               name = "b"
         "#);
+    }
+
+    /// A feature without coordinates, such as an empty multi-point, has no geometry field at all,
+    /// as in the generated encoding.
+    #[test]
+    fn features_without_geometry_omit_the_field() -> MvtResult<()> {
+        use geo_types::MultiPoint;
+
+        let mut layer = MvtLayerBuilder::new("l")?;
+        let mut feature = layer.feature_of(MvtGeomType::Point);
+        feature.points([])?;
+        layer = feature.end();
+        layer = layer
+            .feature(&MvtGeometry::MultiPoint(MultiPoint(vec![])))?
+            .end();
+        let bytes = layer.encode();
+
+        let tile = Tile::decode_from_slice(&bytes)?;
+        let features = &tile.layers[0].features;
+        assert_eq!(features.len(), 2);
+        assert!(features.iter().all(|feature| feature.geometry.is_empty()));
+        assert_eq!(tile.encode_to_vec(), bytes);
+        Ok(())
     }
 
     #[test]
