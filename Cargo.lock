@@ -453,6 +453,7 @@ dependencies = [
  "foldhash 0.2.0",
  "geo-types",
  "gungraun",
+ "hashbrown 0.17.1",
  "insta",
  "mvt",
  "mvt-reader",

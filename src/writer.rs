@@ -1,16 +1,16 @@
 //! Writes MVT protobuf bytes as features are added, field for field what the generated message
 //! code would encode, without building a message per feature.
 
-use std::collections::HashMap as StdHashMap;
+use std::hash::{BuildHasher as _, Hasher as _};
 
 use buffa::Enumeration as _;
-use buffa::encoding::varint_len;
+use buffa::encoding::{Tag, WireType, encode_varint, varint_len};
 use buffa::types::{
-    encode_uint32, int32_encoded_len, int64_encoded_len, put_bool_field, put_double_field,
-    put_float_field, put_int32_field, put_int64_field, put_len_delimited_header, put_sint64_field,
-    put_string_field, put_uint32_field, put_uint64_field, sint64_encoded_len, string_encoded_len,
-    uint32_encoded_len, uint64_encoded_len,
+    int32_encoded_len, put_int32_field, put_len_delimited_header, put_string_field,
+    put_uint32_field, put_uint64_field, uint64_encoded_len,
 };
+use hashbrown::HashTable;
+use usize_cast::IntoUsize as _;
 
 use crate::generated::vector_tile::tile::GeomType;
 use crate::geom_writer::{GeometryBuf, u32_index};
@@ -19,11 +19,11 @@ use crate::{
     MvtValue, MvtValueRef,
 };
 
-/// Randomly seeded, so tile data can not be crafted to collide, but much cheaper than the default.
-type HashMap<K, V> = StdHashMap<K, V, foldhash::fast::RandomState>;
-
 /// MVT spec version written into every layer.
 const LAYER_VERSION: u32 = 2;
+
+/// The longest a varint can be, kept free for a layer's length until the layer ends.
+const MAX_VARINT_LEN: usize = 10;
 
 #[derive(Debug, Default)]
 pub struct MvtTileBuilder {
@@ -31,6 +31,8 @@ pub struct MvtTileBuilder {
     buf: Vec<u8>,
     /// Keys the next layer starts with, in this order, whether or not a feature uses them.
     next_keys: Vec<Box<str>>,
+    /// The state of the last layer, kept so the next one reuses its tables and buffers.
+    spare: Option<Box<LayerState>>,
 }
 
 impl MvtTileBuilder {
@@ -85,13 +87,21 @@ pub(crate) fn encode_tile(tile: &MvtTile) -> MvtResult<Vec<u8>> {
 #[derive(Debug)]
 pub struct MvtLayerBuilder {
     tile: MvtTileBuilder,
+    /// Boxed, so that handing the builder from feature to feature moves a pointer.
+    state: Box<LayerState>,
+}
+
+#[derive(Debug, Default)]
+struct LayerState {
     name: String,
     extent: u32,
-    /// The encoded `Layer.features` fields so far.
-    features: Vec<u8>,
+    /// Where the layer's length goes in the tile buffer, which holds the layer as it is written.
+    start: usize,
     num_features: usize,
-    keys: HashMap<Box<str>, u32>,
-    values: ValueIndex,
+    keys: Interner,
+    values: Interner,
+    /// For each key, the index of the value it last had, which it most likely has again.
+    last_values: Vec<u32>,
     /// The feature being built, kept between features so its buffers are reused.
     feature: FeatureBuf,
 }
@@ -101,7 +111,11 @@ struct FeatureBuf {
     id: Option<u64>,
     geom_type: GeomType,
     tags: Vec<u32>,
+    /// The tags of the previous feature, whose keys the next feature most likely repeats in order.
+    last_tags: Vec<u32>,
     geometry: GeometryBuf,
+    /// The varints of the packed tags, as written.
+    packed_tags: Vec<u8>,
 }
 
 impl MvtLayerBuilder {
@@ -120,41 +134,38 @@ impl MvtLayerBuilder {
     }
 
     fn with_tile(mut tile: MvtTileBuilder, name: String) -> MvtResult<Self> {
-        let mut keys = HashMap::default();
+        let mut state = tile.spare.take().unwrap_or_default();
+        Tag::new(3, WireType::LengthDelimited).encode(&mut tile.buf);
+        state.start = tile.buf.len();
+        tile.buf.extend_from_slice(&[0; MAX_VARINT_LEN]);
+        put_string_field(1, &name, &mut tile.buf);
+        state.name = name;
+        state.extent = DEFAULT_EXTENT.get();
         for key in std::mem::take(&mut tile.next_keys) {
-            let idx = u32_index(keys.len())?;
-            keys.entry(key).or_insert(idx);
+            state.keys.index(KEY, key.as_bytes(), None)?;
         }
-        Ok(Self {
-            tile,
-            name,
-            extent: DEFAULT_EXTENT.get(),
-            features: Vec::new(),
-            num_features: 0,
-            keys,
-            values: ValueIndex::default(),
-            feature: FeatureBuf::default(),
-        })
+        Ok(Self { tile, state })
     }
 
     pub fn extent(&mut self, extent: MvtExtent) -> &mut Self {
-        self.extent = extent.get();
+        self.state.extent = extent.get();
         self
     }
 
     #[must_use]
     pub fn name(&self) -> &str {
-        &self.name
+        &self.state.name
     }
 
     #[must_use]
     pub fn num_features(&self) -> usize {
-        self.num_features
+        self.state.num_features
     }
 
     pub fn feature(mut self, geometry: &MvtGeometry) -> MvtResult<MvtFeatureBuilder> {
-        self.feature.reset();
-        self.feature.geom_type = self.feature.geometry.push_geometry(geometry)?;
+        let feature = &mut self.state.feature;
+        feature.reset();
+        feature.geom_type = feature.geometry.push_geometry(geometry)?;
         Ok(MvtFeatureBuilder { layer: self })
     }
 
@@ -162,8 +173,8 @@ impl MvtLayerBuilder {
     /// [`MvtFeatureBuilder::line`] or [`MvtFeatureBuilder::ring`], straight from its coordinates.
     #[must_use = "call .end() to commit the feature to the layer"]
     pub fn feature_of(mut self, geom_type: MvtGeomType) -> MvtFeatureBuilder {
-        self.feature.reset();
-        self.feature.geom_type = match geom_type {
+        self.state.feature.reset();
+        self.state.feature.geom_type = match geom_type {
             MvtGeomType::Point => GeomType::Point,
             MvtGeomType::LineString => GeomType::Linestring,
             MvtGeomType::Polygon => GeomType::Polygon,
@@ -175,50 +186,30 @@ impl MvtLayerBuilder {
     pub fn end(self) -> MvtTileBuilder {
         let Self {
             mut tile,
-            name,
-            extent,
-            features,
-            keys,
-            values,
-            ..
+            mut state,
         } = self;
-        let mut keys: Vec<_> = keys.into_iter().collect();
-        keys.sort_unstable_by_key(|(_, idx)| *idx);
-        let values = values.into_ordered();
-
-        let len = 1
-            + string_encoded_len(&name)
-            + features.len()
-            + keys
-                .iter()
-                .map(|(key, _)| 1 + string_encoded_len(key))
-                .sum::<usize>()
-            + values
-                .iter()
-                .map(|value| {
-                    let len = value.encoded_len();
-                    1 + varint_len(len as u64) + len
-                })
-                .sum::<usize>()
-            + 1
-            + uint32_encoded_len(extent)
-            + 1
-            + uint32_encoded_len(LAYER_VERSION);
-
         let buf = &mut tile.buf;
-        buf.reserve(len + 10);
-        put_len_delimited_header(3, len as u64, buf);
-        put_string_field(1, &name, buf);
-        buf.extend_from_slice(&features);
-        for (key, _) in &keys {
-            put_string_field(3, key, buf);
-        }
-        for value in &values {
-            put_len_delimited_header(4, value.encoded_len() as u64, buf);
-            value.write(buf);
-        }
-        put_uint32_field(5, extent, buf);
+        buf.extend_from_slice(&state.keys.encoded);
+        buf.extend_from_slice(&state.values.encoded);
+        put_uint32_field(5, state.extent, buf);
         put_uint32_field(15, LAYER_VERSION, buf);
+
+        // The layer's length goes into the room left for it, and the layer moves up to follow it.
+        let body = state.start + MAX_VARINT_LEN;
+        let mut len = (buf.len() - body) as u64;
+        let mut end = state.start;
+        while len >= 0x80 {
+            buf[end] = len.to_le_bytes()[0] | 0x80;
+            len >>= 7;
+            end += 1;
+        }
+        buf[end] = len.to_le_bytes()[0];
+        end += 1;
+        buf.copy_within(body.., end);
+        buf.truncate(buf.len() - (body - end));
+
+        state.clear();
+        tile.spare = Some(state);
         tile
     }
 
@@ -251,34 +242,48 @@ impl MvtLayerBuilder {
             geom_type,
             tags,
             geometry,
-        } = &self.feature;
-        let tags_len = packed_len(tags);
-        // The geometry is held as its packed varints already.
-        let geometry_len = geometry.data.len();
+            packed_tags,
+            ..
+        } = &mut self.state.feature;
+        // The tags are packed first, as their length comes before them; the geometry is held as
+        // its packed varints already.
+        pack_varints(tags, packed_tags);
         let len = id.map_or(0, |id| 1 + uint64_encoded_len(id))
-            + packed_field_len(tags_len)
+            + packed_field_len(packed_tags.len())
             + 1
             + int32_encoded_len(geom_type.to_i32())
-            + packed_field_len(geometry_len);
+            + packed_field_len(geometry.data.len());
 
-        let buf = &mut self.features;
+        let buf = &mut self.tile.buf;
+        buf.reserve(1 + varint_len(len as u64) + len);
         put_len_delimited_header(2, len as u64, buf);
         if let Some(id) = *id {
             put_uint64_field(1, id, buf);
         }
-        put_packed(2, tags, tags_len, buf);
+        put_packed(2, packed_tags, buf);
         put_int32_field(3, geom_type.to_i32(), buf);
-        if geometry_len != 0 {
-            put_len_delimited_header(4, geometry_len as u64, buf);
-            buf.extend_from_slice(&geometry.data);
-        }
-        self.num_features += 1;
+        put_packed(4, &geometry.data, buf);
+        self.state.num_features += 1;
+    }
+}
+
+impl LayerState {
+    /// Empties the layer for reuse, keeping the capacity of its tables and buffers.
+    fn clear(&mut self) {
+        self.name.clear();
+        self.num_features = 0;
+        self.keys.clear();
+        self.values.clear();
+        self.last_values.clear();
+        self.feature.reset();
+        self.feature.last_tags.clear();
     }
 }
 
 impl FeatureBuf {
     fn reset(&mut self) {
         self.id = None;
+        std::mem::swap(&mut self.tags, &mut self.last_tags);
         self.tags.clear();
         self.geometry.clear();
     }
@@ -293,7 +298,7 @@ pub struct MvtFeatureBuilder {
 
 impl MvtFeatureBuilder {
     pub fn id(&mut self, id: Option<u64>) -> &mut Self {
-        self.layer.feature.id = id;
+        self.layer.state.feature.id = id;
         self
     }
 
@@ -307,17 +312,24 @@ impl MvtFeatureBuilder {
 
     /// Like [`Self::tag`], without allocating for keys and values the layer already has.
     pub fn tag_ref(&mut self, key: &str, value: MvtValueRef<'_>) -> MvtResult<&mut Self> {
-        let layer = &mut self.layer;
-        if let Some(value_idx) = layer.values.index(value)? {
-            let key_idx = if let Some(&idx) = layer.keys.get(key) {
-                idx
-            } else {
-                let idx = u32_index(layer.keys.len())?;
-                layer.keys.insert(key.into(), idx);
-                idx
-            };
-            layer.feature.tags.extend([key_idx, value_idx]);
+        let mut scratch = [0; MAX_VARINT_LEN];
+        let Some((kind, payload)) = value_payload(value, &mut scratch) else {
+            return Ok(self);
+        };
+        let layer = &mut *self.layer.state;
+        let feature = &mut layer.feature;
+        let predicted = feature.last_tags.get(feature.tags.len()).copied();
+        let key_idx = layer.keys.index(KEY, key.as_bytes(), predicted)?;
+        let slot = key_idx.into_usize();
+        let predicted = layer.last_values.get(slot).copied();
+        let value_idx = layer.values.index(kind, payload, predicted)?;
+        if let Some(last) = layer.last_values.get_mut(slot) {
+            *last = value_idx;
+        } else {
+            layer.last_values.resize(slot, u32::MAX);
+            layer.last_values.push(value_idx);
         }
+        feature.tags.extend([key_idx, value_idx]);
         Ok(self)
     }
 
@@ -390,7 +402,7 @@ impl MvtFeatureBuilder {
     }
 
     fn geometry(&mut self, expected: GeomType) -> MvtResult<&mut GeometryBuf> {
-        let feature = &mut self.layer.feature;
+        let feature = &mut self.layer.state.feature;
         if feature.geom_type == expected {
             Ok(&mut feature.geometry)
         } else {
@@ -400,7 +412,7 @@ impl MvtFeatureBuilder {
 
     #[must_use]
     pub fn num_tags(&self) -> usize {
-        self.layer.feature.tags.len() / 2
+        self.layer.state.feature.tags.len() / 2
     }
 
     #[must_use]
@@ -410,91 +422,184 @@ impl MvtFeatureBuilder {
     }
 }
 
-/// A layer's values, numbered in the order they first appear. Strings are looked up by `&str`, so
-/// only a new value allocates.
+/// The kind of a key in an [`Interner`]; values use their `Value` field number, from 1 to 7.
+const KEY: u8 = 0;
+
+/// A layer's keys or values, numbered in the order they first appear. Each is kept once, as the
+/// layer field it is written as, and is looked up by comparing against those bytes, so no key or
+/// value allocates, and the layer is written by copying them.
 #[derive(Debug, Default)]
-struct ValueIndex {
-    strings: HashMap<Box<str>, u32>,
-    scalars: HashMap<Scalar, u32>,
+struct Interner {
+    /// The `Layer.keys` or `Layer.values` fields, in index order.
+    encoded: Vec<u8>,
+    /// By index, the kind of each entry and where its payload is in `encoded`.
+    entries: Vec<Entry>,
+    /// The entry indices, by the hash of their kind and payload.
+    table: HashTable<u32>,
+    /// Randomly seeded, so tile data can not be crafted to collide, but much cheaper than the default.
+    hasher: foldhash::fast::RandomState,
 }
 
-/// A non-string value, with floats compared by their bits as [`MvtValue`] does.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum Scalar {
-    Float(u32),
-    Double(u64),
-    Int(i64),
-    UInt(u64),
-    SInt(i64),
-    Bool(bool),
+/// An entry of an [`Interner`]: its kind, and its payload as `encoded[start..end]`.
+#[derive(Debug, Clone, Copy)]
+struct Entry {
+    kind: u8,
+    start: u32,
+    end: u32,
 }
 
-impl ValueIndex {
-    /// The index of `value`, or `None` for a null, which MVT cannot store.
-    fn index(&mut self, value: MvtValueRef<'_>) -> MvtResult<Option<u32>> {
-        let next = u32_index(self.strings.len() + self.scalars.len())?;
-        let scalar = match value {
-            MvtValueRef::String(value) => {
-                return Ok(Some(match self.strings.get(value) {
-                    Some(&idx) => idx,
-                    None => *self.strings.entry(value.into()).or_insert(next),
-                }));
+impl Interner {
+    /// The index of the entry of `kind` with `payload`, adding it if new. The `predicted` index is
+    /// checked first, which saves hashing the payload when it is right.
+    #[expect(
+        clippy::inline_always,
+        reason = "plain `#[inline]` left one of its two call sites in `tag_ref` out of line, at 4% of encoding"
+    )]
+    #[inline(always)]
+    fn index(&mut self, kind: u8, payload: &[u8], predicted: Option<u32>) -> MvtResult<u32> {
+        if let Some(idx) = predicted {
+            if self.matches(idx, kind, payload) {
+                return Ok(idx);
             }
-            MvtValueRef::Float(value) => Scalar::Float(value.to_bits()),
-            MvtValueRef::Double(value) => Scalar::Double(value.to_bits()),
-            MvtValueRef::Int(value) => Scalar::Int(value),
-            MvtValueRef::UInt(value) => Scalar::UInt(value),
-            MvtValueRef::SInt(value) => Scalar::SInt(value),
-            MvtValueRef::Bool(value) => Scalar::Bool(value),
-            MvtValueRef::Null => return Ok(None),
+        }
+        let hash = hash_entry(&self.hasher, kind, payload);
+        if let Some(&idx) = self
+            .table
+            .find(hash, |&idx| self.matches(idx, kind, payload))
+        {
+            return Ok(idx);
+        }
+        self.insert(hash, kind, payload)
+    }
+
+    #[inline]
+    fn matches(&self, idx: u32, kind: u8, payload: &[u8]) -> bool {
+        self.entries.get(idx.into_usize()).is_some_and(|entry| {
+            entry.kind == kind
+                && (self
+                    .encoded
+                    .get(entry.start.into_usize()..entry.end.into_usize()))
+                .is_some_and(|known| bytes_eq(known, payload))
+        })
+    }
+
+    /// Adds a new entry. Kept out of line, so that lookups, far more frequent, stay small.
+    #[inline(never)]
+    fn insert(&mut self, hash: u64, kind: u8, payload: &[u8]) -> MvtResult<u32> {
+        let idx = u32_index(self.entries.len())?;
+        write_entry(kind, payload, &mut self.encoded);
+        let end = u32_index(self.encoded.len())?;
+        let start = u32_index(self.encoded.len() - payload.len())?;
+        self.entries.push(Entry { kind, start, end });
+        let Self {
+            encoded,
+            entries,
+            table,
+            hasher,
+        } = self;
+        table.insert_unique(hash, idx, |&idx| {
+            let entry = entries[idx.into_usize()];
+            let payload = &encoded[entry.start.into_usize()..entry.end.into_usize()];
+            hash_entry(hasher, entry.kind, payload)
+        });
+        Ok(idx)
+    }
+
+    /// Empties the interner for reuse, keeping its capacity.
+    fn clear(&mut self) {
+        self.encoded.clear();
+        self.entries.clear();
+        self.table.clear();
+    }
+}
+
+/// Whether `a` and `b` are equal. Up to 16 bytes, which most keys and values of a layer are, they
+/// are compared as two overlapping words from either end, which is cheaper than calling `memcmp`.
+#[expect(
+    clippy::inline_always,
+    reason = "called in every lookup, for a few instructions"
+)]
+#[inline(always)]
+fn bytes_eq(a: &[u8], b: &[u8]) -> bool {
+    let len = a.len();
+    if len != b.len() {
+        false
+    } else if len > 16 {
+        a == b
+    } else if len >= 8 {
+        a.first_chunk::<8>() == b.first_chunk::<8>() && a.last_chunk::<8>() == b.last_chunk::<8>()
+    } else if len >= 4 {
+        a.first_chunk::<4>() == b.first_chunk::<4>() && a.last_chunk::<4>() == b.last_chunk::<4>()
+    } else {
+        // The first, middle and last bytes are all the bytes of up to three.
+        a.first() == b.first() && a.get(len / 2) == b.get(len / 2) && a.last() == b.last()
+    }
+}
+
+#[inline]
+fn hash_entry(hasher: &foldhash::fast::RandomState, kind: u8, payload: &[u8]) -> u64 {
+    let mut hasher = hasher.build_hasher();
+    hasher.write(payload);
+    // Payloads of different kinds rarely match, so the kind needs no hashing of its own.
+    hasher.finish() ^ u64::from(kind)
+}
+
+/// Appends the layer field for an entry: a `Layer.keys` string, or a `Layer.values` message
+/// holding the one `Value` field `kind` with `payload`.
+fn write_entry(kind: u8, payload: &[u8], buf: &mut Vec<u8>) {
+    let len = payload.len() as u64;
+    if kind == KEY {
+        put_len_delimited_header(3, len, buf);
+    } else if kind == 1 {
+        put_len_delimited_header(4, 1 + varint_len(len) as u64 + len, buf);
+        put_len_delimited_header(1, len, buf);
+    } else {
+        let wire_type = match kind {
+            2 => WireType::Fixed32,
+            3 => WireType::Fixed64,
+            _ => WireType::Varint,
         };
-        Ok(Some(*self.scalars.entry(scalar).or_insert(next)))
+        put_len_delimited_header(4, 1 + len, buf);
+        Tag::new(u32::from(kind), wire_type).encode(buf);
     }
-
-    fn into_ordered(self) -> Vec<LayerValue> {
-        let mut values: Vec<_> = (self.strings.into_iter())
-            .map(|(value, idx)| (idx, LayerValue::String(value)))
-            .chain((self.scalars.into_iter()).map(|(value, idx)| (idx, LayerValue::Scalar(value))))
-            .collect();
-        values.sort_unstable_by_key(|(idx, _)| *idx);
-        values.into_iter().map(|(_, value)| value).collect()
-    }
+    buf.extend_from_slice(payload);
 }
 
-/// A `Layer.values` entry, as a `Value` message with one field set.
-enum LayerValue {
-    String(Box<str>),
-    Scalar(Scalar),
-}
-
-impl LayerValue {
-    fn encoded_len(&self) -> usize {
-        1 + match self {
-            Self::String(value) => string_encoded_len(value),
-            Self::Scalar(Scalar::Float(_)) => 4,
-            Self::Scalar(Scalar::Double(_)) => 8,
-            Self::Scalar(Scalar::Int(value)) => int64_encoded_len(*value),
-            Self::Scalar(Scalar::UInt(value)) => uint64_encoded_len(*value),
-            Self::Scalar(Scalar::SInt(value)) => sint64_encoded_len(*value),
-            Self::Scalar(Scalar::Bool(_)) => 1,
+/// The kind and payload of a value: its `Value` field number, and the bytes of that field after
+/// its tag, without the length of a string. Floats compare by their bits, as in [`MvtValue`]. A
+/// null has none, as MVT cannot store it.
+fn value_payload<'a>(
+    value: MvtValueRef<'a>,
+    scratch: &'a mut [u8; MAX_VARINT_LEN],
+) -> Option<(u8, &'a [u8])> {
+    let (kind, varint) = match value {
+        MvtValueRef::String(value) => return Some((1, value.as_bytes())),
+        MvtValueRef::Float(value) => {
+            scratch[..4].copy_from_slice(&value.to_bits().to_le_bytes());
+            return Some((2, &scratch[..4]));
         }
-    }
-
-    fn write(&self, buf: &mut Vec<u8>) {
-        match *self {
-            Self::String(ref value) => put_string_field(1, value, buf),
-            Self::Scalar(Scalar::Float(bits)) => put_float_field(2, f32::from_bits(bits), buf),
-            Self::Scalar(Scalar::Double(bits)) => put_double_field(3, f64::from_bits(bits), buf),
-            Self::Scalar(Scalar::Int(value)) => put_int64_field(4, value, buf),
-            Self::Scalar(Scalar::UInt(value)) => put_uint64_field(5, value, buf),
-            Self::Scalar(Scalar::SInt(value)) => put_sint64_field(6, value, buf),
-            Self::Scalar(Scalar::Bool(value)) => put_bool_field(7, value, buf),
+        MvtValueRef::Double(value) => {
+            scratch[..8].copy_from_slice(&value.to_bits().to_le_bytes());
+            return Some((3, &scratch[..8]));
         }
-    }
+        MvtValueRef::Int(value) => (4, value.cast_unsigned()),
+        MvtValueRef::UInt(value) => (5, value),
+        MvtValueRef::SInt(value) => (6, ((value << 1) ^ (value >> 63)).cast_unsigned()),
+        MvtValueRef::Bool(value) => (7, u64::from(value)),
+        MvtValueRef::Null => return None,
+    };
+    let mut sink = &mut scratch[..];
+    encode_varint(varint, &mut sink);
+    let len = MAX_VARINT_LEN - sink.len();
+    Some((kind, &scratch[..len]))
 }
 
-fn packed_len(values: &[u32]) -> usize {
-    values.iter().map(|&v| uint32_encoded_len(v)).sum()
+/// Replaces the contents of `out` with `values` as varints.
+fn pack_varints(values: &[u32], out: &mut Vec<u8>) {
+    out.clear();
+    for &value in values {
+        encode_varint(u64::from(value), out);
+    }
 }
 
 /// The size of a packed field holding `len` bytes, which is not written at all when empty.
@@ -506,12 +611,10 @@ fn packed_field_len(len: usize) -> usize {
     }
 }
 
-fn put_packed(field: u32, values: &[u32], len: usize, buf: &mut Vec<u8>) {
-    if !values.is_empty() {
-        put_len_delimited_header(field, len as u64, buf);
-        for &value in values {
-            encode_uint32(value, buf);
-        }
+fn put_packed(field: u32, packed: &[u8], buf: &mut Vec<u8>) {
+    if !packed.is_empty() {
+        put_len_delimited_header(field, packed.len() as u64, buf);
+        buf.extend_from_slice(packed);
     }
 }
 
@@ -541,7 +644,7 @@ mod tests {
         feature.tag("f", MvtValue::Float(f32::NAN)).unwrap();
 
         assert_eq!(
-            feature.layer.feature.tags,
+            feature.layer.state.feature.tags,
             vec![0, 0, 0, 1, 1, 0, 2, 2, 2, 3, 3, 4, 3, 4]
         );
     }
@@ -550,7 +653,7 @@ mod tests {
     #[cfg(feature = "reader")]
     fn preset_keys_start_the_next_layer_only() {
         let mut tile = MvtTileBuilder::new();
-        tile.preset_keys(["id", "name", "kind"]);
+        tile.preset_keys(["id", "name", "kind", "name"]);
         let mut feature = tile
             .layer("first")
             .unwrap()
@@ -891,16 +994,39 @@ mod tests {
         feature.line([coord]).unwrap();
     }
 
+    #[test]
+    fn packed_varints_match_the_generated_encoding() {
+        let values = [
+            0,
+            1,
+            0x7f,
+            0x80,
+            300,
+            0x3fff,
+            0x4000,
+            0x1f_ffff,
+            0x20_0000,
+            u32::MAX,
+        ];
+        let mut expected = Vec::new();
+        for &value in &values {
+            buffa::types::encode_uint32(value, &mut expected);
+        }
+        let mut packed = vec![0xaa; 3];
+        pack_varints(&values, &mut packed);
+        assert_eq!(packed, expected);
+        pack_varints(&[], &mut packed);
+        assert_eq!(packed, b"");
+    }
+
     /// The `Value` message the layer writes for `value`.
     fn encoded_value(value: &MvtValue) -> Vec<u8> {
-        let mut values = ValueIndex::default();
-        values.index(value.into()).unwrap();
-        let mut buf = Vec::new();
-        for value in values.into_ordered() {
-            value.write(&mut buf);
-            assert_eq!(buf.len(), value.encoded_len());
+        let mut scratch = [0; MAX_VARINT_LEN];
+        let mut values = Interner::default();
+        if let Some((kind, payload)) = value_payload(value.into(), &mut scratch) {
+            values.index(kind, payload, None).unwrap();
         }
-        buf
+        values.encoded
     }
 
     #[test]
@@ -921,7 +1047,11 @@ mod tests {
             (MvtValue::Bool(true), Value::default().with_bool_value(true)),
         ];
         for (value, proto) in cases {
-            assert_eq!(encoded_value(&value), proto.encode_to_vec(), "{value:?}");
+            let body = proto.encode_to_vec();
+            let mut expected = Vec::new();
+            put_len_delimited_header(4, body.len() as u64, &mut expected);
+            expected.extend_from_slice(&body);
+            assert_eq!(encoded_value(&value), expected, "{value:?}");
         }
         assert_eq!(encoded_value(&MvtValue::Null), b"");
     }

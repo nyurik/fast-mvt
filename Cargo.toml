@@ -10,6 +10,7 @@ criterion = { version = "0.8", features = ["html_reports"] }
 foldhash = "0.2.0"
 geo-types = "0.7.19"
 gungraun = "0.20.0"
+hashbrown = { version = "0.17.1", default-features = false, features = ["inline-more"] }
 insta = "1.43"
 mvt = "0.15.0"
 mvt-reader = "2.3.0"
@@ -90,8 +91,8 @@ required-features = ["reader", "writer"]
 
 [features]
 default = ["reader", "writer", "json"]
-reader = ["dep:usize_cast"]
-writer = ["dep:foldhash"]
+reader = []
+writer = ["dep:foldhash", "dep:hashbrown"]
 json = ["dep:serde", "dep:serde_json", "buffa/json"]
 arbitrary = ["dep:arbitrary", "buffa/arbitrary"]
 cli = ["reader", "dep:clap"]
@@ -102,10 +103,11 @@ buffa.workspace = true
 clap = { workspace = true, optional = true }
 foldhash = { workspace = true, optional = true }
 geo-types.workspace = true
+hashbrown = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"], optional = true }
 serde_json = { workspace = true, optional = true }
 thiserror.workspace = true
-usize_cast = { workspace = true, optional = true }
+usize_cast.workspace = true
 
 [dev-dependencies]
 # For the `codegen` example, which regenerates src/generated (`just update-generated`, needs protoc)
