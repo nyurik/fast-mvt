@@ -1,10 +1,15 @@
 mod feature;
 mod layer;
+mod lazy;
 mod property;
 mod tile;
 
 pub use feature::MvtFeatureRef;
 pub use layer::MvtLayerRef;
+pub use lazy::{
+    MvtLazyFeature, MvtLazyLayer, MvtLazyLayerEntry, MvtLazyPropertyIter, MvtLazyReader,
+    MvtPackedIter,
+};
 pub use property::MvtPropertyIter;
 pub use tile::MvtReaderRef;
 

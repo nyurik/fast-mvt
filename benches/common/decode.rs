@@ -11,7 +11,7 @@
 
 use std::hint::black_box;
 
-use fast_mvt::MvtReaderRef;
+use fast_mvt::{MvtLazyReader, MvtReaderRef};
 use prost::Message as _;
 use tinymvt::geometry::GeometryDecoder as TinyGeometryDecoder;
 use tinymvt::tag::TagsDecoder as TinyTagsDecoder;
@@ -24,6 +24,8 @@ use super::BenchTile;
 pub enum Dec {
     /// [`fast_mvt`]'s zero-copy [`MvtReaderRef`] traversal.
     Fast,
+    /// [`fast_mvt`]'s [`MvtLazyReader`] traversal.
+    FastLazy,
     /// The [`mvt_reader`] crate.
     MvtReader,
     /// [`tinymvt`] (prost-decoded).
@@ -32,12 +34,13 @@ pub enum Dec {
 
 impl Dec {
     /// Every variant, in a stable order (used by the criterion harness to build its comparison group).
-    pub const ALL: [Self; 3] = [Self::Fast, Self::MvtReader, Self::Tiny];
+    pub const ALL: [Self; 4] = [Self::Fast, Self::FastLazy, Self::MvtReader, Self::Tiny];
 
     /// Human-readable label (the criterion benchmark name; matches the pre-gungraun output).
     pub fn label(self) -> &'static str {
         match self {
             Self::Fast => "fast-mvt traverse",
+            Self::FastLazy => "fast-mvt lazy traverse",
             Self::MvtReader => "mvt-reader traverse",
             Self::Tiny => "tinymvt traverse",
         }
@@ -50,6 +53,7 @@ pub fn run(dec: Dec, tiles: &[BenchTile]) {
         let data = black_box(tile.data.as_slice());
         match dec {
             Dec::Fast => traverse_fast_mvt(data),
+            Dec::FastLazy => traverse_fast_mvt_lazy(data),
             Dec::MvtReader => traverse_mvt_reader(data),
             Dec::Tiny => traverse_tinymvt(data),
         }
@@ -64,6 +68,21 @@ fn traverse_fast_mvt(data: &[u8]) {
             black_box(feature.geometry().expect("fast-mvt geometry"));
             for property in feature.properties() {
                 black_box(property.expect("fast-mvt property"));
+            }
+        }
+    }
+}
+
+fn traverse_fast_mvt_lazy(data: &[u8]) {
+    let reader = MvtLazyReader::new(data).expect("fast-mvt lazy parse");
+    for entry in reader.layers() {
+        let layer = entry.decode().expect("fast-mvt lazy layer");
+        for feature in layer.features() {
+            let feature = feature.expect("fast-mvt lazy feature");
+            black_box(feature.id());
+            black_box(feature.geometry().expect("fast-mvt lazy geometry"));
+            for property in feature.properties() {
+                black_box(property.expect("fast-mvt lazy property"));
             }
         }
     }

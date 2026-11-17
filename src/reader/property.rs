@@ -40,7 +40,7 @@ impl<'a> Iterator for MvtPropertyIter<'a> {
     }
 }
 
-pub(crate) fn value_ref<'a>(value: &'a proto_tile::ValueView<'a>) -> MvtValueRef<'a> {
+pub(crate) fn value_ref<'a>(value: &proto_tile::ValueView<'a>) -> MvtValueRef<'a> {
     if let Some(value) = value.string_value {
         MvtValueRef::String(value)
     } else if let Some(value) = value.float_value {

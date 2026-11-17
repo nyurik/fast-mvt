@@ -3,6 +3,7 @@ codecov:
 
 ignore:
   - "src/generated/**"
+  - "examples/codegen.rs"
 
 coverage:
   status:
