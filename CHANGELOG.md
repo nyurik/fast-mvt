@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1](https://github.com/nyurik/fast-mvt/compare/v0.8.0...v0.8.1) - 2026-11-18
+
+### Other
+
+- *(reader)* inline the small per-feature and per-tag accessors ([#78](https://github.com/nyurik/fast-mvt/pull/78))
+
 ## [0.8.0](https://github.com/nyurik/fast-mvt/compare/v0.7.3...v0.8.0) - 2026-11-18
 
 Decoding runs about 30% fewer CPU instructions and keeps 71% less heap; encoding runs about 40% fewer, with
