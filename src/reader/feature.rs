@@ -13,14 +13,14 @@ use crate::{MvtFeature, MvtGeometry, MvtResult, MvtValueRef};
 pub struct MvtFeatureRef<'a> {
     tile: &'a TileData<'a>,
     layer: &'a LayerData<'a>,
-    feature: &'a FeatureData,
+    feature: &'a FeatureData<'a>,
 }
 
 impl<'a> MvtFeatureRef<'a> {
     pub(crate) fn new(
         tile: &'a TileData<'a>,
         layer: &'a LayerData<'a>,
-        feature: &'a FeatureData,
+        feature: &'a FeatureData<'a>,
     ) -> Self {
         Self {
             tile,
@@ -36,12 +36,12 @@ impl<'a> MvtFeatureRef<'a> {
 
     /// The tags: key and value indices, alternating, decoded from the tile as they are iterated.
     pub fn tags(self) -> impl ExactSizeIterator<Item = u32> + Clone + 'a {
-        self.tile.tags(self.feature)
+        self.feature.tags.iter()
     }
 
     /// The geometry commands and parameters, decoded from the tile as they are iterated.
     pub fn geometry_commands(self) -> impl ExactSizeIterator<Item = u32> + Clone + 'a {
-        self.tile.geometry(self.feature)
+        self.feature.geometry.iter()
     }
 
     #[must_use]
@@ -56,7 +56,7 @@ impl<'a> MvtFeatureRef<'a> {
 
     #[must_use]
     pub fn has_properties(self) -> bool {
-        self.feature.has_tags()
+        !self.feature.tags.is_empty()
     }
 
     #[must_use]
@@ -64,7 +64,7 @@ impl<'a> MvtFeatureRef<'a> {
         MvtPropertyIter::new(
             self.tile.keys(self.layer),
             self.tile.values(self.layer),
-            self.tile.tags(self.feature),
+            self.feature.tags.iter(),
         )
     }
 
@@ -78,7 +78,7 @@ impl<'a> MvtFeatureRef<'a> {
     }
 
     pub fn geometry(self) -> MvtResult<MvtGeometry> {
-        decode_geometry(self.geom_type(), self.tile.geometry(self.feature))
+        decode_geometry(self.geom_type(), self.feature.geometry.iter())
     }
 
     pub fn to_feature(self) -> MvtResult<MvtFeature> {
