@@ -13,6 +13,7 @@ pub struct MvtPropertyIter<'t, 'a> {
 }
 
 impl<'t, 'a> MvtPropertyIter<'t, 'a> {
+    #[inline]
     pub(crate) fn new(
         keys: &'t [&'a str],
         values: &'t [MvtValueRef<'a>],
@@ -25,6 +26,7 @@ impl<'t, 'a> MvtPropertyIter<'t, 'a> {
 impl<'a> Iterator for MvtPropertyIter<'_, 'a> {
     type Item = MvtResult<(&'a str, MvtValueRef<'a>)>;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         let key_idx = self.tags.next()?;
         let Some(value_idx) = self.tags.next() else {
@@ -39,6 +41,7 @@ impl<'a> Iterator for MvtPropertyIter<'_, 'a> {
         Some(Ok((key, value)))
     }
 
+    #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
         let len = self.tags.len().div_ceil(2);
         (len, Some(len))

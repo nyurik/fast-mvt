@@ -35,6 +35,7 @@ impl<'a> MvtFeatureRef<'a> {
     }
 
     /// The tags: key and value indices, alternating, decoded from the tile as they are iterated.
+    #[inline]
     pub fn tags(self) -> impl ExactSizeIterator<Item = u32> + Clone + 'a {
         self.tile.tags(self.feature)
     }
@@ -59,6 +60,7 @@ impl<'a> MvtFeatureRef<'a> {
         self.feature.has_tags()
     }
 
+    #[inline]
     #[must_use]
     pub fn properties(self) -> MvtPropertyIter<'a, 'a> {
         MvtPropertyIter::new(

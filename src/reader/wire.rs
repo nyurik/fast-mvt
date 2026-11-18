@@ -163,14 +163,17 @@ impl<'a> TileData<'a> {
         &self.features[to_usize(&layer.features)]
     }
 
+    #[inline]
     pub(crate) fn keys(&self, layer: &LayerData<'_>) -> &[&'a str] {
         &self.keys[to_usize(&layer.keys)]
     }
 
+    #[inline]
     pub(crate) fn values(&self, layer: &LayerData<'_>) -> &[MvtValueRef<'a>] {
         &self.values[to_usize(&layer.values)]
     }
 
+    #[inline]
     pub(crate) fn tags(&self, feature: &FeatureData) -> PackedU32<'_> {
         self.packed(feature.tags)
     }
@@ -179,6 +182,7 @@ impl<'a> TileData<'a> {
         self.packed(feature.geometry)
     }
 
+    #[inline]
     fn packed(&self, packed: Packed) -> PackedU32<'_> {
         let source = if packed.joined {
             &self.joined
@@ -510,6 +514,7 @@ pub(crate) struct PackedU32<'a> {
 impl Iterator for PackedU32<'_> {
     type Item = u32;
 
+    #[inline]
     fn next(&mut self) -> Option<u32> {
         let (&first, mut rest) = self.bytes.split_first()?;
         self.remaining -= 1;
