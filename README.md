@@ -74,8 +74,7 @@ fn count_vertices(bytes: &[u8], layer_name: &str) -> MvtResult<usize> {
     let mut vertices = 0;
     for feature in layer.features() {
         // MoveTo and LineTo commands are followed by two parameters per vertex.
-        let commands = feature?.geometry_commands().collect::<MvtResult<Vec<u32>>>()?;
-        vertices += commands.len() / 2;
+        vertices += feature?.geometry_commands().len() / 2;
     }
     Ok(vertices)
 }
@@ -210,12 +209,12 @@ fn encode_tile(layers: &[(&str, MvtGeometry)]) -> MvtResult<Vec<u8>> {
 
 Run with `just bench-decode`:
 
-| Decoder                         | Time     | Throughput  | Compare     |
-|---------------------------------|----------|-------------|-------------|
-| `fast-mvt`                      | 98.4 ms  | 156.6 MiB/s | -           |
-| `tinymvt 0.3.0`                 | 192.0 ms | 80.3 MiB/s  | 2.0x slower |
-| `mvt-reader 2.3.0`              | 600.2 ms | 25.7 MiB/s  | 6.1x slower |
-| `mvt` <br/>decode not supported | n/a      | n/a         | n/a         |
+| Decoder                         | Time     | Throughput  | Compare      |
+|---------------------------------|----------|-------------|--------------|
+| `fast-mvt`                      | 36.1 ms  | 426.8 MiB/s | -            |
+| `tinymvt 0.3.0`                 | 128.1 ms | 120.3 MiB/s | 3.5x slower  |
+| `mvt-reader 2.3.0`              | 458.2 ms | 33.6 MiB/s  | 12.7x slower |
+| `mvt` <br/>decode not supported | n/a      | n/a         | n/a          |
 
 #### Encoding
 
@@ -247,10 +246,10 @@ work as the tables above with Callgrind, which is deterministic, unlike the time
 
 | Decoder              | Instructions | Compare   |
 |----------------------|--------------|-----------|
-| `fast-mvt`           | 867 M        | -         |
-| `fast-mvt`, lazy     | 868 M        | 1.0x      |
-| `tinymvt 0.3.0`      | 1,696 M      | 2.0x more |
-| `mvt-reader 2.3.0`   | 4,432 M      | 5.1x more |
+| `fast-mvt`           | 593 M        | -         |
+| `fast-mvt`, lazy     | 640 M        | 1.1x more |
+| `tinymvt 0.3.0`      | 1,696 M      | 2.9x more |
+| `mvt-reader 2.3.0`   | 4,432 M      | 7.5x more |
 
 | Encoder         | From a parsed tile | Compare   | From an owned tile | Compare   |
 |-----------------|--------------------|-----------|--------------------|-----------|

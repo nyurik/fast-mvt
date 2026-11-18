@@ -2,19 +2,19 @@
 //!
 //! [`MvtLazyReader`] finds a tile's layers without decoding them.
 //! [`MvtLazyLayer`] decodes one layer's keys and values and finds its
-//! features. [`MvtLazyFeature`] decodes a feature when it is read, and its
-//! tags and geometry commands are read from the tile's bytes as they are
-//! iterated. Reading a tile allocates only each decoded layer's tables, so
+//! features. [`MvtLazyFeature`] decodes a feature when it is read, checking
+//! its tags and geometry commands, which are decoded from the tile's bytes as
+//! they are iterated. Reading a tile allocates only each decoded layer's tables, so
 //! it suits a reader that reads some layers, or each feature once, where
 //! [`MvtReaderRef`](crate::MvtReaderRef) decodes everything up front.
 //!
 
-use buffa::encoding::{Tag, WireType, check_wire_type, decode_varint, skip_field};
-use buffa::types::{borrow_bytes, borrow_str, decode_int32, decode_uint32, decode_uint64};
-use buffa::{Enumeration as _, MessageView as _};
-use usize_cast::IntoUsize as _;
+use buffa::Enumeration as _;
+use buffa::encoding::{Tag, WireType, check_wire_type, skip_field};
+use buffa::types::{borrow_bytes, borrow_str};
 
-use super::property::value_ref;
+use super::property::MvtPropertyIter;
+use super::wire::{FeatureFields, LayerItem, read_feature, read_layer};
 use crate::generated::vector_tile::tile as proto_tile;
 use crate::geom_reader::decode_geometry;
 use crate::{DEFAULT_EXTENT, MvtError, MvtGeometry, MvtResult, MvtValueRef};
@@ -126,46 +126,23 @@ impl<'a> MvtLazyLayer<'a> {
     /// The layer isn't a valid protobuf message, has no name, or has a
     /// version other than 1, 2 or 3.
     pub fn decode(data: &'a [u8]) -> MvtResult<Self> {
-        let mut layer = Self {
-            name: "",
-            version: 0,
-            extent: None,
-            keys: Vec::new(),
-            values: Vec::new(),
-            features: Vec::new(),
-        };
-        let mut buf = data;
-        while !buf.is_empty() {
-            let tag = Tag::decode(&mut buf)?;
-            match tag.field_number() {
-                1 => {
-                    check_wire_type(tag, WireType::LengthDelimited)?;
-                    layer.name = borrow_str(&mut buf)?;
-                }
-                2 => {
-                    check_wire_type(tag, WireType::LengthDelimited)?;
-                    layer.features.push(borrow_bytes(&mut buf)?);
-                }
-                3 => {
-                    check_wire_type(tag, WireType::LengthDelimited)?;
-                    layer.keys.push(borrow_str(&mut buf)?);
-                }
-                4 => {
-                    check_wire_type(tag, WireType::LengthDelimited)?;
-                    let value = proto_tile::ValueView::decode_view(borrow_bytes(&mut buf)?)?;
-                    layer.values.push(value_ref(&value));
-                }
-                5 => {
-                    check_wire_type(tag, WireType::Varint)?;
-                    layer.extent = Some(decode_uint32(&mut buf)?);
-                }
-                15 => {
-                    check_wire_type(tag, WireType::Varint)?;
-                    layer.version = decode_uint32(&mut buf)?;
-                }
-                _ => skip_field(tag, &mut buf)?,
+        let (mut keys, mut values, mut features) = (Vec::new(), Vec::new(), Vec::new());
+        let header = read_layer(data, |item| {
+            match item {
+                LayerItem::Feature(feature) => features.push(feature),
+                LayerItem::Key(key) => keys.push(key),
+                LayerItem::Value(value) => values.push(value),
             }
-        }
+            Ok(())
+        })?;
+        let layer = Self {
+            name: header.name,
+            version: header.version,
+            extent: header.extent,
+            keys,
+            values,
+            features,
+        };
         if layer.name.is_empty() {
             return Err(MvtError::MissingLayerName);
         }
@@ -227,137 +204,64 @@ impl<'a> MvtLazyLayer<'a> {
 }
 
 /// A feature of an [`MvtLazyLayer`], whose tags and geometry commands are
-/// read as they are iterated.
+/// checked, and decoded as they are iterated.
 #[derive(Clone, Debug)]
 pub struct MvtLazyFeature<'l, 'a> {
     layer: &'l MvtLazyLayer<'a>,
-    id: Option<u64>,
-    geom_type: Option<i32>,
-    tags: MvtPackedIter<'a>,
-    geometry: MvtPackedIter<'a>,
-}
-
-/// The occurrences of a repeated `uint32` field in a message.
-#[derive(Default)]
-struct RepeatedField<'a> {
-    /// The message from the field's first occurrence on.
-    from_first: &'a [u8],
-    /// The first occurrence's values, if it is packed.
-    packed: &'a [u8],
-    occurrences: usize,
-    unpacked: bool,
-}
-
-impl<'a> RepeatedField<'a> {
-    /// Reads past an occurrence of the field, whose tag `tag` starts `at`.
-    fn read(&mut self, at: &'a [u8], tag: Tag, buf: &mut &'a [u8]) -> MvtResult<()> {
-        if self.occurrences == 0 {
-            self.from_first = at;
-        }
-        self.occurrences += 1;
-        if tag.wire_type() == WireType::Varint {
-            self.unpacked = true;
-            decode_varint(buf)?;
-        } else {
-            check_wire_type(tag, WireType::LengthDelimited)?;
-            let packed = borrow_bytes(buf)?;
-            if self.occurrences == 1 {
-                self.packed = packed;
-            }
-        }
-        Ok(())
-    }
-
-    fn values(&self, field_number: u32) -> MvtPackedIter<'a> {
-        if self.occurrences == 1 && !self.unpacked {
-            MvtPackedIter {
-                field_number,
-                packed: self.packed,
-                rest: &[],
-            }
-        } else {
-            MvtPackedIter {
-                field_number,
-                packed: &[],
-                rest: self.from_first,
-            }
-        }
-    }
+    fields: FeatureFields<'a>,
+    /// Packed fields written in several records, joined here; empty for nearly every feature.
+    joined: Vec<u8>,
 }
 
 impl<'l, 'a> MvtLazyFeature<'l, 'a> {
     fn decode(layer: &'l MvtLazyLayer<'a>, data: &'a [u8]) -> MvtResult<Self> {
-        let mut id = None;
-        let mut geom_type = None;
-        let mut tags = RepeatedField::default();
-        let mut geometry = RepeatedField::default();
-        let mut buf = data;
-        while !buf.is_empty() {
-            let at = buf;
-            let tag = Tag::decode(&mut buf)?;
-            match tag.field_number() {
-                1 => {
-                    check_wire_type(tag, WireType::Varint)?;
-                    id = Some(decode_uint64(&mut buf)?);
-                }
-                2 => tags.read(at, tag, &mut buf)?,
-                3 => {
-                    check_wire_type(tag, WireType::Varint)?;
-                    geom_type = Some(decode_int32(&mut buf)?);
-                }
-                4 => geometry.read(at, tag, &mut buf)?,
-                _ => skip_field(tag, &mut buf)?,
-            }
-        }
+        let mut joined = Vec::new();
+        let fields = read_feature(data, &mut joined)?;
         Ok(Self {
             layer,
-            id,
-            geom_type,
-            tags: tags.values(2),
-            geometry: geometry.values(4),
+            fields,
+            joined,
         })
     }
 
     #[must_use]
     pub fn id(&self) -> Option<u64> {
-        self.id
+        self.fields.id
     }
 
     /// The geometry type, `None` for none or an unknown one.
     #[must_use]
     pub fn geom_type(&self) -> Option<proto_tile::GeomType> {
-        self.geom_type.and_then(proto_tile::GeomType::from_i32)
+        self.fields.geom_type
     }
 
-    /// The geometry type's value as the tile has it.
+    /// The geometry type's value, `None` for none or an unknown one.
     #[must_use]
     pub fn geom_type_value(&self) -> Option<i32> {
-        self.geom_type
+        self.fields.geom_type.map(|geom_type| geom_type.to_i32())
     }
 
     #[must_use]
     pub fn has_properties(&self) -> bool {
-        self.tags().next().is_some()
+        !self.fields.tags.is_empty()
     }
 
     /// The tags: key and value indices, alternating.
-    #[must_use]
-    pub fn tags(&self) -> MvtPackedIter<'a> {
-        self.tags.clone()
+    pub fn tags(&self) -> impl ExactSizeIterator<Item = u32> + Clone + '_ {
+        self.fields.tags.iter(&self.joined)
     }
 
     #[must_use]
-    pub fn properties(&self) -> MvtLazyPropertyIter<'l, 'a> {
-        MvtLazyPropertyIter {
-            keys: &self.layer.keys,
-            values: &self.layer.values,
-            tags: self.tags(),
-        }
+    pub fn properties(&self) -> MvtPropertyIter<'_, 'a> {
+        MvtPropertyIter::new(
+            &self.layer.keys,
+            &self.layer.values,
+            self.fields.tags.iter(&self.joined),
+        )
     }
 
-    #[must_use]
-    pub fn geometry_commands(&self) -> MvtPackedIter<'a> {
-        self.geometry.clone()
+    pub fn geometry_commands(&self) -> impl ExactSizeIterator<Item = u32> + Clone + '_ {
+        self.fields.geometry.iter(&self.joined)
     }
 
     /// The geometry, as [`MvtFeatureRef::geometry`](crate::MvtFeatureRef::geometry) decodes it.
@@ -366,107 +270,7 @@ impl<'l, 'a> MvtLazyFeature<'l, 'a> {
     ///
     /// The geometry commands are malformed.
     pub fn geometry(&self) -> MvtResult<MvtGeometry> {
-        let commands = self.geometry_commands().collect::<MvtResult<Vec<_>>>()?;
-        decode_geometry(self.geom_type(), &commands)
-    }
-}
-
-/// The values of a feature's repeated `uint32` field, decoded from the
-/// tile's bytes as they are iterated. A field that occurs more than once,
-/// packed or not, gives the values of each occurrence in turn. After an
-/// error, it ends.
-#[derive(Clone, Debug)]
-pub struct MvtPackedIter<'a> {
-    field_number: u32,
-    /// The packed values still to read.
-    packed: &'a [u8],
-    /// The rest of the message, to search for more occurrences of the field.
-    rest: &'a [u8],
-}
-
-impl MvtPackedIter<'_> {
-    #[cold]
-    fn next_occurrence(&mut self) -> Option<MvtResult<u32>> {
-        while !self.rest.is_empty() {
-            let result = (|| {
-                let tag = Tag::decode(&mut self.rest)?;
-                if tag.field_number() != self.field_number {
-                    skip_field(tag, &mut self.rest)?;
-                    return Ok(None);
-                }
-                if tag.wire_type() == WireType::Varint {
-                    return Ok(Some(decode_varint(&mut self.rest)?));
-                }
-                check_wire_type(tag, WireType::LengthDelimited)?;
-                self.packed = borrow_bytes(&mut self.rest)?;
-                Ok(None)
-            })();
-            match result {
-                Ok(Some(value)) => return Some(Ok(truncate(value))),
-                Ok(None) if !self.packed.is_empty() => return self.next(),
-                Ok(None) => {}
-                Err(error) => return Some(Err(self.fail(error))),
-            }
-        }
-        None
-    }
-
-    fn fail(&mut self, error: buffa::DecodeError) -> MvtError {
-        self.packed = &[];
-        self.rest = &[];
-        error.into()
-    }
-}
-
-/// `uint32`: the low 32 bits of the varint.
-#[expect(clippy::cast_possible_truncation)]
-fn truncate(value: u64) -> u32 {
-    value as u32
-}
-
-impl Iterator for MvtPackedIter<'_> {
-    type Item = MvtResult<u32>;
-
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.packed.is_empty() {
-            return self.next_occurrence();
-        }
-        Some(match decode_varint(&mut self.packed) {
-            Ok(value) => Ok(truncate(value)),
-            Err(error) => Err(self.fail(error)),
-        })
-    }
-}
-
-/// The properties of an [`MvtLazyFeature`]: each tag's key and value.
-#[derive(Clone, Debug)]
-pub struct MvtLazyPropertyIter<'l, 'a> {
-    keys: &'l [&'a str],
-    values: &'l [MvtValueRef<'a>],
-    tags: MvtPackedIter<'a>,
-}
-
-impl<'a> Iterator for MvtLazyPropertyIter<'_, 'a> {
-    type Item = MvtResult<(&'a str, MvtValueRef<'a>)>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let key_idx = match self.tags.next()? {
-            Ok(key) => key,
-            Err(error) => return Some(Err(error)),
-        };
-        let value_idx = match self.tags.next() {
-            Some(Ok(value)) => value,
-            Some(Err(error)) => return Some(Err(error)),
-            None => return Some(Err(MvtError::InvalidTagsLength(1))),
-        };
-        let Some(&key) = self.keys.get(key_idx.into_usize()) else {
-            return Some(Err(MvtError::InvalidKeyIndex(key_idx)));
-        };
-        let Some(&value) = self.values.get(value_idx.into_usize()) else {
-            return Some(Err(MvtError::InvalidValueIndex(value_idx)));
-        };
-        Some(Ok((key, value)))
+        decode_geometry(self.geom_type(), self.geometry_commands())
     }
 }
 
@@ -539,16 +343,8 @@ mod tests {
                 let lazy = lazy.unwrap();
                 assert_eq!(lazy.id(), eager.id());
                 assert_eq!(lazy.geom_type(), eager.geom_type());
-                assert_eq!(
-                    lazy.tags().collect::<MvtResult<Vec<_>>>().unwrap(),
-                    eager.tags()
-                );
-                assert_eq!(
-                    lazy.geometry_commands()
-                        .collect::<MvtResult<Vec<_>>>()
-                        .unwrap(),
-                    eager.geometry_commands()
-                );
+                assert!(lazy.tags().eq(eager.tags()));
+                assert!(lazy.geometry_commands().eq(eager.geometry_commands()));
                 assert_eq!(
                     lazy.properties().collect::<MvtResult<Vec<_>>>().unwrap(),
                     eager.properties_vec().unwrap()
@@ -586,6 +382,17 @@ mod tests {
             properties[2],
             Err("invalid feature tags length: 1".to_string())
         );
+
+        // A feature's packed fields are checked when it is decoded, as the eager reader checks
+        // them when it reads the tile: here an unterminated varint in the tags.
+        let feature = [0x12, 0x01, 0x80];
+        let mut layer_bytes = vec![0x0a, 0x01, b'l', 0x78, 0x02, 0x12, 0x03];
+        layer_bytes.extend(feature);
+        let mut bytes = vec![0x1a, u8::try_from(layer_bytes.len()).unwrap()];
+        bytes.extend(layer_bytes);
+        assert!(MvtReaderRef::new(&bytes).is_err());
+        let entry = MvtLazyReader::new(&bytes).unwrap().layers().next().unwrap();
+        assert!(entry.decode().unwrap().feature(0).unwrap().is_err());
 
         let mut version_4 = layer("a", vec![]);
         version_4.version = 4;

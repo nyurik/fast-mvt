@@ -35,8 +35,8 @@ pub use serde_json;
 mod reader;
 #[cfg(feature = "reader")]
 pub use reader::{
-    MvtFeatureRef, MvtLayerRef, MvtLazyFeature, MvtLazyLayer, MvtLazyLayerEntry,
-    MvtLazyPropertyIter, MvtLazyReader, MvtPackedIter, MvtPropertyIter, MvtReaderRef,
+    MvtFeatureRef, MvtLayerRef, MvtLazyFeature, MvtLazyLayer, MvtLazyLayerEntry, MvtLazyReader,
+    MvtPropertyIter, MvtReaderRef,
 };
 
 mod types;

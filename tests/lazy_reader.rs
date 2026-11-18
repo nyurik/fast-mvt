@@ -5,7 +5,7 @@
 use std::fs;
 use std::path::Path;
 
-use fast_mvt::{MvtLazyReader, MvtReaderRef, MvtResult};
+use fast_mvt::{MvtLazyReader, MvtReaderRef};
 use test_each_file::test_each_path;
 
 test_each_path! { for ["mvt"] in "fixtures/mvt-fixtures/fixtures" as fixtures => reads_as_eager }
@@ -39,16 +39,8 @@ fn reads_as_eager([path]: [&Path; 1]) {
             let lazy = lazy.unwrap_or_else(|e| panic!("{}: {e}", path.display()));
             assert_eq!(lazy.id(), eager.id());
             assert_eq!(lazy.geom_type(), eager.geom_type());
-            assert_eq!(
-                lazy.tags().collect::<MvtResult<Vec<_>>>().expect("tags"),
-                eager.tags()
-            );
-            assert_eq!(
-                lazy.geometry_commands()
-                    .collect::<MvtResult<Vec<_>>>()
-                    .expect("geometry"),
-                eager.geometry_commands()
-            );
+            assert!(lazy.tags().eq(eager.tags()));
+            assert!(lazy.geometry_commands().eq(eager.geometry_commands()));
             let lazy_properties = lazy.properties().map(|p| p.map_err(|e| e.to_string()));
             let eager_properties = eager.properties().map(|p| p.map_err(|e| e.to_string()));
             assert!(lazy_properties.eq(eager_properties), "{}", path.display());
