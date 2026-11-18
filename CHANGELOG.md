@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0](https://github.com/nyurik/fast-mvt/compare/v0.7.3...v0.8.0) - 2026-11-18
+
+### Fixed
+
+- make usize_cast a reader-only dependency, fix Rust 1.100 ([#70](https://github.com/nyurik/fast-mvt/pull/70))
+
+### Other
+
+- correct the README decode table
+- refresh the README benchmark tables
+- *(reader)* [**breaking**] read tiles in one pass, without per-feature allocations
+- *(writer)* reuse layer state and intern keys and values as their encoded fields ([#76](https://github.com/nyurik/fast-mvt/pull/76))
+- *(writer)* write one-count command words as their single byte ([#77](https://github.com/nyurik/fast-mvt/pull/77))
+- *(writer)* write geometry as varints while it is built ([#74](https://github.com/nyurik/fast-mvt/pull/74))
+- drop the fixture tiles outside the CPU instruction counts ([#75](https://github.com/nyurik/fast-mvt/pull/75))
+- update dependencies and sort imports ([#73](https://github.com/nyurik/fast-mvt/pull/73))
+
 ## [0.7.3](https://github.com/nyurik/fast-mvt/compare/v0.7.2...v0.7.3) - 2026-11-12
 
 ### Added
