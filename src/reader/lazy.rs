@@ -247,10 +247,12 @@ impl<'l, 'a> MvtLazyFeature<'l, 'a> {
     }
 
     /// The tags: key and value indices, alternating.
+    #[inline]
     pub fn tags(&self) -> impl ExactSizeIterator<Item = u32> + Clone + '_ {
         self.fields.tags.iter(&self.joined)
     }
 
+    #[inline]
     #[must_use]
     pub fn properties(&self) -> MvtPropertyIter<'_, 'a> {
         MvtPropertyIter::new(
