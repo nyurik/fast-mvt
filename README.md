@@ -205,16 +205,19 @@ fn encode_tile(layers: &[(&str, MvtGeometry)]) -> MvtResult<Vec<u8>> {
 
 ## Benchmarks
 
+Measured on an Intel Core i9-10885H, x86-64 Linux, with Rust 1.100.
+
 #### Decoding
 
 Run with `just bench-decode`:
 
-| Decoder                         | Time     | Throughput  | Compare      |
-|---------------------------------|----------|-------------|--------------|
-| `fast-mvt`                      | 36.1 ms  | 426.8 MiB/s | -            |
-| `tinymvt 0.3.0`                 | 128.1 ms | 120.3 MiB/s | 3.5x slower  |
-| `mvt-reader 2.3.0`              | 458.2 ms | 33.6 MiB/s  | 12.7x slower |
-| `mvt` <br/>decode not supported | n/a      | n/a         | n/a          |
+| Decoder                         | Time     | Throughput  | Compare     |
+|---------------------------------|----------|-------------|-------------|
+| `fast-mvt`                      | 80.5 ms  | 191.4 MiB/s | -           |
+| `fast-mvt`, lazy                | 63.3 ms  | 243.4 MiB/s | 1.3x faster |
+| `tinymvt 0.3.0`                 | 192.9 ms | 79.9 MiB/s  | 2.4x slower |
+| `mvt-reader 2.3.0`              | 597.3 ms | 25.8 MiB/s  | 7.4x slower |
+| `mvt` <br/>decode not supported | n/a      | n/a         | n/a         |
 
 #### Encoding
 
@@ -224,38 +227,37 @@ Encoding from an already parsed integer tile model:
 
 | Encoder                                | Time    | Throughput  | Compare     |
 |----------------------------------------|---------|-------------|-------------|
-| `fast-mvt`                             | 4.7 ms  | 182.4 MiB/s | -           |
-| `tinymvt 0.3.0`                        | 11.9 ms | 72.2 MiB/s  | 2.5x slower |
-| `mvt 0.15.0`                           | 19.7 ms | 43.5 MiB/s  | 4.2x slower |
+| `fast-mvt`                             | 4.4 ms  | 194.4 MiB/s | -           |
+| `tinymvt 0.3.0`                        | 14.2 ms | 60.3 MiB/s  | 3.2x slower |
+| `mvt 0.15.0`                           | 23.7 ms | 36.2 MiB/s  | 5.4x slower |
 | `mvt-reader` <br/>encode not supported | n/a     | n/a         | n/a         |
 
 Encoding from an owned tile value. Note that "owned" benchmark includes deep-cloning of each tile, so it makes no sense to compare throughput between the owned vs referenced table above, only between different encoders.
 
 | Encoder                                | Time    | Throughput | Compare     |
 |----------------------------------------|---------|------------|-------------|
-| `fast-mvt`                             | 11.1 ms | 77.4 MiB/s | -           |
-| `tinymvt 0.3.0`                        | 18.8 ms | 45.7 MiB/s | 1.7x slower |
-| `mvt 0.15.0`                           | 25.9 ms | 33.1 MiB/s | 2.3x slower |
+| `fast-mvt`                             | 11.5 ms | 74.8 MiB/s | -           |
+| `tinymvt 0.3.0`                        | 23.2 ms | 37.0 MiB/s | 2.0x slower |
+| `mvt 0.15.0`                           | 32.2 ms | 26.6 MiB/s | 2.8x slower |
 | `mvt-reader` <br/>encode not supported | n/a     | n/a        | n/a         |
 
 #### CPU instructions
 
 Run with `just bench-cpu`, which needs Valgrind and `gungraun-runner`. It counts the CPU instructions of the same
-work as the tables above with Callgrind, which is deterministic, unlike the time. Measured on x86-64 Linux with Rust
-1.100.
+work as the tables above with Callgrind, which is deterministic, unlike the time.
 
-| Decoder              | Instructions | Compare   |
-|----------------------|--------------|-----------|
-| `fast-mvt`           | 593 M        | -         |
-| `fast-mvt`, lazy     | 640 M        | 1.1x more |
-| `tinymvt 0.3.0`      | 1,696 M      | 2.9x more |
-| `mvt-reader 2.3.0`   | 4,432 M      | 7.5x more |
+| Decoder            | Instructions | Compare   |
+|--------------------|--------------|-----------|
+| `fast-mvt`         | 593 M        | -         |
+| `fast-mvt`, lazy   | 640 M        | 1.1x more |
+| `tinymvt 0.3.0`    | 1,703 M      | 2.9x more |
+| `mvt-reader 2.3.0` | 4,454 M      | 7.5x more |
 
 | Encoder         | From a parsed tile | Compare   | From an owned tile | Compare   |
 |-----------------|--------------------|-----------|--------------------|-----------|
-| `fast-mvt`      | 38.6 M             | -         | 108.5 M            | -         |
-| `tinymvt 0.3.0` | 113.6 M            | 2.9x more | 184.0 M            | 1.7x more |
-| `mvt 0.15.0`    | 202.5 M            | 5.2x more | 272.4 M            | 2.5x more |
+| `fast-mvt`      | 37.5 M             | -         | 107.2 M            | -         |
+| `tinymvt 0.3.0` | 115.3 M            | 3.1x more | 185.0 M            | 1.7x more |
+| `mvt 0.15.0`    | 202.2 M            | 5.4x more | 271.7 M            | 2.5x more |
 
 ## Features
 
