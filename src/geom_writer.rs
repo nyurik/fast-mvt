@@ -75,7 +75,8 @@ impl GeometryBuf {
     pub(crate) fn line(&mut self, coords: impl IntoIterator<Item = MvtCoord>) -> MvtResult<()> {
         let mut coords = coords.into_iter();
         let first = coords.next().ok_or(MvtError::InvalidGeometry)?;
-        self.command(Command::MoveTo, [first])?;
+        self.data.push(Command::MoveTo.encode_one());
+        self.push_delta(first);
         self.command(Command::LineTo, coords)?;
         Ok(())
     }
@@ -145,7 +146,7 @@ impl GeometryBuf {
         let reverse = area != 0 && (area > 0) != exterior;
         // Each coordinate takes two varints, mostly a byte each.
         self.data.reserve(coords.len() * 2 + 8);
-        self.push_varint(Command::MoveTo.encode(1)?);
+        self.data.push(Command::MoveTo.encode_one());
         self.push_delta(ring_coord(coords, 0, reverse));
         if coords.len() > 1 {
             self.push_varint(Command::LineTo.encode(u32_index(coords.len() - 1)?)?);
@@ -153,7 +154,7 @@ impl GeometryBuf {
                 self.push_delta(ring_coord(coords, idx, reverse));
             }
         }
-        self.push_varint(Command::ClosePath.encode(1)?);
+        self.data.push(Command::ClosePath.encode_one());
         Ok(())
     }
 

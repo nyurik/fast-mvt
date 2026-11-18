@@ -46,12 +46,24 @@ impl Command {
         if count > 0x1fff_ffff {
             return Err(MvtError::CommandCount(count));
         }
-        let value = match self {
+        Ok(u32::from(self.id()) | (count << 3))
+    }
+
+    /// The word of this command with a count of one, such as a `ClosePath` or a `MoveTo` of one
+    /// point, which is always a single varint byte.
+    #[cfg(feature = "writer")]
+    pub(crate) const fn encode_one(self) -> u8 {
+        self.id() | 1 << 3
+    }
+
+    /// The command's id, in the low three bits of its word.
+    #[cfg(feature = "writer")]
+    const fn id(self) -> u8 {
+        match self {
             Self::MoveTo => 1,
             Self::LineTo => 2,
             Self::ClosePath => 7,
-        };
-        Ok(value | (count << 3))
+        }
     }
 }
 
@@ -68,6 +80,11 @@ mod tests {
         assert_eq!(Command::decode(move_to).unwrap(), (Command::MoveTo, 1));
         assert_eq!(Command::LineTo.encode(3).unwrap(), 26);
         assert_eq!(Command::ClosePath.encode(1).unwrap(), 15);
+        for command in [Command::MoveTo, Command::LineTo, Command::ClosePath] {
+            let one = command.encode_one();
+            assert!(one < 0x80, "{command:?} of one is not a single varint byte");
+            assert_eq!(u32::from(one), command.encode(1).unwrap());
+        }
         assert!(matches!(
             Command::MoveTo.encode(0x2000_0000),
             Err(MvtError::CommandCount(0x2000_0000))
