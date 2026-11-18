@@ -211,13 +211,13 @@ Measured on an Intel Core i9-10885H, x86-64 Linux, with Rust 1.100.
 
 Run with `just bench-decode`:
 
-| Decoder                         | Time     | Throughput  | Compare     |
-|---------------------------------|----------|-------------|-------------|
-| `fast-mvt`                      | 80.5 ms  | 191.4 MiB/s | -           |
-| `fast-mvt`, lazy                | 63.3 ms  | 243.4 MiB/s | 1.3x faster |
-| `tinymvt 0.3.0`                 | 192.9 ms | 79.9 MiB/s  | 2.4x slower |
-| `mvt-reader 2.3.0`              | 597.3 ms | 25.8 MiB/s  | 7.4x slower |
-| `mvt` <br/>decode not supported | n/a      | n/a         | n/a         |
+| Decoder                         | Time     | Throughput  | Compare      |
+|---------------------------------|----------|-------------|--------------|
+| `fast-mvt`                      | 64.5 ms  | 238.9 MiB/s | -            |
+| `fast-mvt`, lazy                | 71.2 ms  | 216.4 MiB/s | 1.1x slower  |
+| `tinymvt 0.3.0`                 | 221.7 ms | 69.5 MiB/s  | 3.4x slower  |
+| `mvt-reader 2.3.0`              | 694.9 ms | 22.2 MiB/s  | 10.8x slower |
+| `mvt` <br/>decode not supported | n/a      | n/a         | n/a          |
 
 #### Encoding
 
