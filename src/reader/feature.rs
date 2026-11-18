@@ -4,7 +4,7 @@ use buffa::Enumeration as _;
 use geo_types::{Coord, Geometry, LineString, Point, Polygon};
 
 use super::property::MvtPropertyIter;
-use super::wire::{FeatureData, LayerData, PackedU32, TileData};
+use super::wire::{FeatureData, LayerData, TileData};
 use crate::generated::vector_tile::tile as proto_tile;
 use crate::geom_reader::decode_geometry;
 use crate::{MvtFeature, MvtGeometry, MvtResult, MvtValueRef};
@@ -34,18 +34,14 @@ impl<'a> MvtFeatureRef<'a> {
         self.feature.id
     }
 
-    /// The raw tag indices. The first call for any feature decodes the tags and geometry of the
-    /// whole tile; [`Self::properties`] reads the tags without that.
-    #[must_use]
-    pub fn tags(self) -> &'a [u32] {
-        self.tile.tags_slice(self.feature)
+    /// The tags: key and value indices, alternating, decoded from the tile as they are iterated.
+    pub fn tags(self) -> impl ExactSizeIterator<Item = u32> + Clone + 'a {
+        self.tile.tags(self.feature)
     }
 
-    /// The raw geometry command stream. The first call for any feature decodes the tags and
-    /// geometry of the whole tile; [`Self::geometry`] reads the geometry without that.
-    #[must_use]
-    pub fn geometry_commands(self) -> &'a [u32] {
-        self.tile.geometry_slice(self.feature)
+    /// The geometry commands and parameters, decoded from the tile as they are iterated.
+    pub fn geometry_commands(self) -> impl ExactSizeIterator<Item = u32> + Clone + 'a {
+        self.tile.geometry(self.feature)
     }
 
     #[must_use]
@@ -63,17 +59,12 @@ impl<'a> MvtFeatureRef<'a> {
         self.feature.has_tags()
     }
 
-    /// The raw tag indices, read from the tile bytes without decoding the whole tile.
-    pub(crate) fn tag_indices(self) -> PackedU32<'a> {
-        self.tile.tags(self.feature)
-    }
-
     #[must_use]
-    pub fn properties(self) -> MvtPropertyIter<'a> {
+    pub fn properties(self) -> MvtPropertyIter<'a, 'a> {
         MvtPropertyIter::new(
             self.tile.keys(self.layer),
             self.tile.values(self.layer),
-            self.tag_indices(),
+            self.tile.tags(self.feature),
         )
     }
 

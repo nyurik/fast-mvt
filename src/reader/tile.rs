@@ -169,10 +169,13 @@ mod tests {
         assert_eq!(feature.id(), Some(7));
         assert!(feature.has_properties());
         assert_eq!(
-            feature.tags(),
+            feature.tags().collect::<Vec<_>>(),
             [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7]
         );
-        assert_eq!(feature.geometry_commands(), [9, 2, 4, 9, 6, 8]);
+        assert_eq!(
+            feature.geometry_commands().collect::<Vec<_>>(),
+            [9, 2, 4, 9, 6, 8]
+        );
         assert_eq!(feature.geom_type(), Some(proto_tile::GeomType::Point));
         assert_eq!(feature.geom_type_value(), Some(1));
 

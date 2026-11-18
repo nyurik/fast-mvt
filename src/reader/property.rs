@@ -3,24 +3,26 @@ use usize_cast::IntoUsize;
 use super::wire::PackedU32;
 use crate::{MvtError, MvtResult, MvtValueRef};
 
+/// A feature's properties: each tag's key and value, borrowed for `'t` from the layer they are in,
+/// and for `'a` from the tile.
 #[derive(Debug, Clone)]
-pub struct MvtPropertyIter<'a> {
-    keys: &'a [&'a str],
-    values: &'a [MvtValueRef<'a>],
-    tags: PackedU32<'a>,
+pub struct MvtPropertyIter<'t, 'a> {
+    keys: &'t [&'a str],
+    values: &'t [MvtValueRef<'a>],
+    tags: PackedU32<'t>,
 }
 
-impl<'a> MvtPropertyIter<'a> {
+impl<'t, 'a> MvtPropertyIter<'t, 'a> {
     pub(crate) fn new(
-        keys: &'a [&'a str],
-        values: &'a [MvtValueRef<'a>],
-        tags: PackedU32<'a>,
+        keys: &'t [&'a str],
+        values: &'t [MvtValueRef<'a>],
+        tags: PackedU32<'t>,
     ) -> Self {
         Self { keys, values, tags }
     }
 }
 
-impl<'a> Iterator for MvtPropertyIter<'a> {
+impl<'a> Iterator for MvtPropertyIter<'_, 'a> {
     type Item = MvtResult<(&'a str, MvtValueRef<'a>)>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -44,7 +46,7 @@ impl<'a> Iterator for MvtPropertyIter<'a> {
 }
 
 /// Every tag pair, including a malformed trailing one, yields exactly one item.
-impl ExactSizeIterator for MvtPropertyIter<'_> {}
+impl ExactSizeIterator for MvtPropertyIter<'_, '_> {}
 
 #[cfg(test)]
 mod tests {

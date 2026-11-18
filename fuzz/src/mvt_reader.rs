@@ -72,14 +72,18 @@ impl MvtReaderInput {
             for (feature, expected) in layer.features().zip(&expected.features) {
                 assert_eq!(feature.id(), expected.id);
                 assert_eq!(feature.geom_type(), expected.r#type);
-                // Read the packed fields lazily first, then as the slices decoded for the tile.
+                // Any geometry the reader accepts decodes, or fails, without panicking.
                 let _ = feature.geometry();
                 assert_eq!(
                     feature.properties().count(),
                     expected.tags.len().div_ceil(2)
                 );
-                assert_eq!(feature.tags(), expected.tags);
-                assert_eq!(feature.geometry_commands(), expected.geometry);
+                assert!(feature.tags().eq(expected.tags.iter().copied()));
+                assert!(
+                    feature
+                        .geometry_commands()
+                        .eq(expected.geometry.iter().copied())
+                );
             }
         }
     }

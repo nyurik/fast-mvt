@@ -1,12 +1,11 @@
-//! Reads a tile in one pass over its bytes, into a few vectors shared by the whole tile.
+//! Reads tiles with buffa's wire primitives, for both the eager and the lazy reader.
 //!
 //! Strings and the packed `tags` and `geometry` fields are borrowed from the tile bytes rather than
-//! decoded into vectors of each feature's own. The packed fields are checked here, so decoding them
-//! later can not fail. The errors are those of the generated view decoder, whose primitives this
-//! uses, except that the same memory budget admits more of these smaller records.
+//! decoded into vectors of each feature's own. The packed fields are checked when read, so iterating
+//! them later can not fail. The errors are those of the generated decoder, except that the eager
+//! reader's memory budget admits more of its smaller records.
 
 use std::ops::Range;
-use std::sync::OnceLock;
 
 use buffa::encoding::{
     Tag, WireType, check_wire_type, count_varints, skip_field_depth, wire_type_mismatch,
@@ -21,9 +20,9 @@ use usize_cast::IntoUsize as _;
 use crate::MvtValueRef;
 use crate::generated::vector_tile::tile::GeomType;
 
+/// A whole tile, read in one pass into a few vectors shared by all its layers.
 #[derive(Debug, Clone)]
 pub(crate) struct TileData<'a> {
-    /// The whole tile.
     pub(crate) data: &'a [u8],
     pub(crate) layers: Vec<LayerData<'a>>,
     /// The features of every layer, in order.
@@ -32,12 +31,8 @@ pub(crate) struct TileData<'a> {
     keys: Vec<&'a str>,
     /// The values of every layer, in order.
     values: Vec<MvtValueRef<'a>>,
-    /// Packed fields written in several pieces, joined here as they can not be borrowed whole.
+    /// Packed fields written in several records, joined here as they can not be borrowed whole.
     joined: Vec<u8>,
-    /// The number of `tags` and `geometry` elements of all features.
-    packed_count: u32,
-    /// The `tags` and `geometry` of all features, decoded only when asked for as slices.
-    decoded: OnceLock<Vec<u32>>,
 }
 
 #[derive(Debug, Clone)]
@@ -50,14 +45,12 @@ pub(crate) struct LayerData<'a> {
     values: Range<u32>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub(crate) struct FeatureData {
     pub(crate) id: Option<u64>,
     pub(crate) geom_type: Option<GeomType>,
     tags: Packed,
     geometry: Packed,
-    /// Where this feature's tags, followed by its geometry, start in [`TileData::decoded`].
-    decoded_at: u32,
 }
 
 impl FeatureData {
@@ -66,14 +59,12 @@ impl FeatureData {
     }
 }
 
-/// A packed `uint32` field, as the bytes of its checked varints.
+/// Where a packed field's checked varints are: in the tile, or in [`TileData::joined`].
 #[derive(Debug, Clone, Copy, Default)]
 struct Packed {
     start: u32,
     len: u32,
-    /// The number of varints.
     count: u32,
-    /// Whether the bytes are in [`TileData::joined`] rather than the tile.
     joined: bool,
 }
 
@@ -87,8 +78,6 @@ impl<'a> TileData<'a> {
             keys: Vec::new(),
             values: Vec::new(),
             joined: Vec::new(),
-            packed_count: 0,
-            decoded: OnceLock::new(),
         };
         let mut budget = Budget(DEFAULT_ELEMENT_MEMORY_LIMIT);
         let mut cur = data;
@@ -97,9 +86,8 @@ impl<'a> TileData<'a> {
             if tag.field_number() == 3 {
                 check_wire_type(tag, WireType::LengthDelimited)?;
                 let layer = read_bytes(&mut cur)?;
-                let offset = data.len() - cur.len() - layer.len();
                 budget.charge(size_of::<LayerData<'_>>())?;
-                tile.read_layer(layer, offset, &mut budget)?;
+                tile.add_layer(layer, &mut budget)?;
             } else {
                 skip_field_depth(tag, &mut cur, RECURSION_LIMIT)?;
             }
@@ -107,59 +95,28 @@ impl<'a> TileData<'a> {
         Ok(tile)
     }
 
-    /// Reads a layer, whose bytes `buf` start at `offset` in the tile.
-    fn read_layer(
-        &mut self,
-        buf: &'a [u8],
-        offset: usize,
-        budget: &mut Budget,
-    ) -> Result<(), DecodeError> {
+    fn add_layer(&mut self, buf: &'a [u8], budget: &mut Budget) -> Result<(), DecodeError> {
         let (features, keys, values) = (self.features.len(), self.keys.len(), self.values.len());
-        let mut name = "";
-        let mut version = 0;
-        let mut extent = None;
-        let mut cur = buf;
-        while !cur.is_empty() {
-            let tag = Tag::decode(&mut cur)?;
-            match tag.field_number() {
-                15 => {
-                    check_wire_type(tag, WireType::Varint)?;
-                    version = decode_uint32(&mut cur)?;
-                }
-                1 => {
-                    check_wire_type(tag, WireType::LengthDelimited)?;
-                    name = borrow_str(&mut cur)?;
-                }
-                5 => {
-                    check_wire_type(tag, WireType::Varint)?;
-                    extent = Some(decode_uint32(&mut cur)?);
-                }
-                2 => {
-                    check_wire_type(tag, WireType::LengthDelimited)?;
-                    let feature = read_bytes(&mut cur)?;
-                    let feature_offset = offset + buf.len() - cur.len() - feature.len();
-                    budget.charge(size_of::<FeatureData>())?;
-                    self.read_feature(feature, feature_offset)?;
-                }
-                3 => {
-                    check_wire_type(tag, WireType::LengthDelimited)?;
-                    let key = borrow_str(&mut cur)?;
-                    budget.charge(size_of::<&str>())?;
-                    self.keys.push(key);
-                }
-                4 => {
-                    check_wire_type(tag, WireType::LengthDelimited)?;
-                    let value = read_bytes(&mut cur)?;
-                    budget.charge(size_of::<MvtValueRef<'_>>())?;
-                    self.values.push(read_value(value)?);
-                }
-                _ => skip_field_depth(tag, &mut cur, RECURSION_LIMIT - 1)?,
+        let header = read_layer(buf, |item| match item {
+            LayerItem::Feature(feature) => {
+                budget.charge(size_of::<FeatureData>())?;
+                self.add_feature(feature)
             }
-        }
+            LayerItem::Key(key) => {
+                budget.charge(size_of::<&str>())?;
+                self.keys.push(key);
+                Ok(())
+            }
+            LayerItem::Value(value) => {
+                budget.charge(size_of::<MvtValueRef<'_>>())?;
+                self.values.push(value);
+                Ok(())
+            }
+        })?;
         self.layers.push(LayerData {
-            name,
-            version,
-            extent,
+            name: header.name,
+            version: header.version,
+            extent: header.extent,
             features: range(features, self.features.len())?,
             keys: range(keys, self.keys.len())?,
             values: range(values, self.values.len())?,
@@ -167,45 +124,39 @@ impl<'a> TileData<'a> {
         Ok(())
     }
 
-    /// Reads a feature, whose bytes `buf` start at `offset` in the tile.
-    fn read_feature(&mut self, buf: &'a [u8], offset: usize) -> Result<(), DecodeError> {
-        let mut feature = FeatureData {
-            decoded_at: self.packed_count,
-            ..FeatureData::default()
+    /// Reads a feature. Kept out of line, so that the far more frequent keys and values are added
+    /// without a call.
+    #[inline(never)]
+    fn add_feature(&mut self, buf: &'a [u8]) -> Result<(), DecodeError> {
+        let feature = read_feature(buf, &mut self.joined)?;
+        let data = FeatureData {
+            id: feature.id,
+            geom_type: feature.geom_type,
+            tags: self.place(feature.tags)?,
+            geometry: self.place(feature.geometry)?,
         };
-        let mut tags = PackedReader::default();
-        let mut geometry = PackedReader::default();
-        let mut cur = buf;
-        while !cur.is_empty() {
-            let tag = Tag::decode(&mut cur)?;
-            match tag.field_number() {
-                1 => {
-                    check_wire_type(tag, WireType::Varint)?;
-                    feature.id = Some(decode_uint64(&mut cur)?);
-                }
-                3 => {
-                    check_wire_type(tag, WireType::Varint)?;
-                    // A value the enum does not know is dropped, as the generated decoder does.
-                    if let Some(geom_type) = GeomType::from_i32(decode_int32(&mut cur)?) {
-                        feature.geom_type = Some(geom_type);
-                    }
-                }
-                2 => {
-                    let at = offset + buf.len() - cur.len();
-                    tags.read(tag, &mut cur, at)?;
-                }
-                4 => {
-                    let at = offset + buf.len() - cur.len();
-                    geometry.read(tag, &mut cur, at)?;
-                }
-                _ => skip_field_depth(tag, &mut cur, RECURSION_LIMIT - 2)?,
-            }
-        }
-        feature.tags = tags.finish(&mut self.joined)?;
-        feature.geometry = geometry.finish(&mut self.joined)?;
-        self.packed_count += feature.tags.count + feature.geometry.count;
-        self.features.push(feature);
+        self.features.push(data);
         Ok(())
+    }
+
+    /// Where `field`'s varints are: in the tile if borrowed from it, or else in [`Self::joined`].
+    fn place(&self, field: PackedField<'a>) -> Result<Packed, DecodeError> {
+        let (start, len, joined) = match field.bytes {
+            PackedBytes::Borrowed([]) => return Ok(Packed::default()),
+            // The bytes are part of the tile, so their address is past its start.
+            PackedBytes::Borrowed(bytes) => (
+                bytes.as_ptr().addr() - self.data.as_ptr().addr(),
+                bytes.len(),
+                false,
+            ),
+            PackedBytes::Joined { start, end } => (start, end - start, true),
+        };
+        Ok(Packed {
+            start: to_u32(start)?,
+            len: to_u32(len)?,
+            count: field.count,
+            joined,
+        })
     }
 
     pub(crate) fn features(&self, layer: &LayerData<'_>) -> &[FeatureData] {
@@ -228,28 +179,6 @@ impl<'a> TileData<'a> {
         self.packed(feature.geometry)
     }
 
-    pub(crate) fn tags_slice(&self, feature: &FeatureData) -> &[u32] {
-        let start = feature.decoded_at.into_usize();
-        &self.decoded()[start..start + feature.tags.count.into_usize()]
-    }
-
-    pub(crate) fn geometry_slice(&self, feature: &FeatureData) -> &[u32] {
-        let start = (feature.decoded_at + feature.tags.count).into_usize();
-        &self.decoded()[start..start + feature.geometry.count.into_usize()]
-    }
-
-    /// The `tags` and `geometry` of every feature, decoded the first time they are needed.
-    fn decoded(&self) -> &[u32] {
-        self.decoded.get_or_init(|| {
-            let mut decoded = Vec::with_capacity(self.packed_count.into_usize());
-            for feature in &self.features {
-                decoded.extend(self.tags(feature));
-                decoded.extend(self.geometry(feature));
-            }
-            decoded
-        })
-    }
-
     fn packed(&self, packed: Packed) -> PackedU32<'_> {
         let source = if packed.joined {
             &self.joined
@@ -264,9 +193,108 @@ impl<'a> TileData<'a> {
     }
 }
 
+/// A layer's fields other than its features, keys and values.
+pub(crate) struct LayerHeader<'a> {
+    pub(crate) name: &'a str,
+    pub(crate) version: u32,
+    pub(crate) extent: Option<u32>,
+}
+
+/// A layer's feature, key or value, as [`read_layer`] reads it.
+pub(crate) enum LayerItem<'a> {
+    /// The feature message's bytes, read with [`read_feature`].
+    Feature(&'a [u8]),
+    Key(&'a str),
+    Value(MvtValueRef<'a>),
+}
+
+/// Reads a layer message, giving each of its features, keys and values to `item` in order.
+pub(crate) fn read_layer<'a>(
+    buf: &'a [u8],
+    mut item: impl FnMut(LayerItem<'a>) -> Result<(), DecodeError>,
+) -> Result<LayerHeader<'a>, DecodeError> {
+    let mut header = LayerHeader {
+        name: "",
+        version: 0,
+        extent: None,
+    };
+    let mut cur = buf;
+    while !cur.is_empty() {
+        let tag = Tag::decode(&mut cur)?;
+        match tag.field_number() {
+            15 => {
+                check_wire_type(tag, WireType::Varint)?;
+                header.version = decode_uint32(&mut cur)?;
+            }
+            1 => {
+                check_wire_type(tag, WireType::LengthDelimited)?;
+                header.name = borrow_str(&mut cur)?;
+            }
+            5 => {
+                check_wire_type(tag, WireType::Varint)?;
+                header.extent = Some(decode_uint32(&mut cur)?);
+            }
+            2 => {
+                check_wire_type(tag, WireType::LengthDelimited)?;
+                item(LayerItem::Feature(read_bytes(&mut cur)?))?;
+            }
+            3 => {
+                check_wire_type(tag, WireType::LengthDelimited)?;
+                item(LayerItem::Key(borrow_str(&mut cur)?))?;
+            }
+            4 => {
+                check_wire_type(tag, WireType::LengthDelimited)?;
+                item(LayerItem::Value(read_value(read_bytes(&mut cur)?)?))?;
+            }
+            _ => skip_field_depth(tag, &mut cur, RECURSION_LIMIT - 1)?,
+        }
+    }
+    Ok(header)
+}
+
+/// A feature message's fields.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct FeatureFields<'a> {
+    pub(crate) id: Option<u64>,
+    /// The last geometry type the enum knows, as the generated decoder keeps it.
+    pub(crate) geom_type: Option<GeomType>,
+    pub(crate) tags: PackedField<'a>,
+    pub(crate) geometry: PackedField<'a>,
+}
+
+/// Reads a feature message, checking its packed fields. Those written in several records are joined
+/// at the end of `joined`.
+#[inline]
+pub(crate) fn read_feature<'a>(
+    buf: &'a [u8],
+    joined: &mut Vec<u8>,
+) -> Result<FeatureFields<'a>, DecodeError> {
+    let mut feature = FeatureFields::default();
+    let mut cur = buf;
+    while !cur.is_empty() {
+        let tag = Tag::decode(&mut cur)?;
+        match tag.field_number() {
+            1 => {
+                check_wire_type(tag, WireType::Varint)?;
+                feature.id = Some(decode_uint64(&mut cur)?);
+            }
+            3 => {
+                check_wire_type(tag, WireType::Varint)?;
+                if let Some(geom_type) = GeomType::from_i32(decode_int32(&mut cur)?) {
+                    feature.geom_type = Some(geom_type);
+                }
+            }
+            2 => feature.tags.read(tag, &mut cur, joined)?,
+            4 => feature.geometry.read(tag, &mut cur, joined)?,
+            _ => skip_field_depth(tag, &mut cur, RECURSION_LIMIT - 2)?,
+        }
+    }
+    Ok(feature)
+}
+
 /// The value a `Value` message holds, as the first of its fields set in the order they are
 /// declared. A message with no known field set is [`MvtValueRef::Null`].
-pub(crate) fn read_value(buf: &[u8]) -> Result<MvtValueRef<'_>, DecodeError> {
+fn read_value(buf: &[u8]) -> Result<MvtValueRef<'_>, DecodeError> {
     let mut string = None;
     let mut float = None;
     let mut double = None;
@@ -328,20 +356,36 @@ pub(crate) fn read_value(buf: &[u8]) -> Result<MvtValueRef<'_>, DecodeError> {
     })
 }
 
-/// Gathers the records of one packed `uint32` field of a feature. A field is usually one packed
-/// record, borrowed as is; anything else is joined into one run of varints.
-#[derive(Default)]
-struct PackedReader<'a> {
-    /// The bytes of the field's only record so far, and where they start in the tile.
-    bytes: &'a [u8],
-    start: usize,
-    joined: Option<Vec<u8>>,
+/// A packed `uint32` field of a feature: its checked varints, and how many there are.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct PackedField<'a> {
+    bytes: PackedBytes<'a>,
     count: u32,
 }
 
-impl<'a> PackedReader<'a> {
-    /// Reads a record from `cur`, which starts at `offset` in the tile.
-    fn read(&mut self, tag: Tag, cur: &mut &'a [u8], offset: usize) -> Result<(), DecodeError> {
+/// Where a packed field's varints are. A field is usually one packed record, borrowed as is;
+/// anything else is joined into one run of varints in a buffer of the reader's.
+#[derive(Debug, Clone, Copy)]
+enum PackedBytes<'a> {
+    Borrowed(&'a [u8]),
+    Joined { start: usize, end: usize },
+}
+
+impl Default for PackedBytes<'_> {
+    fn default() -> Self {
+        Self::Borrowed(&[])
+    }
+}
+
+impl<'a> PackedField<'a> {
+    /// Reads a record of the field from `cur`, packed or not, joining it to the earlier ones at
+    /// the end of `joined`.
+    fn read(
+        &mut self,
+        tag: Tag,
+        cur: &mut &'a [u8],
+        joined: &mut Vec<u8>,
+    ) -> Result<(), DecodeError> {
         let before = *cur;
         let bytes = match tag.wire_type() {
             WireType::LengthDelimited => {
@@ -357,36 +401,49 @@ impl<'a> PackedReader<'a> {
             }
             _ => return Err(wire_type_mismatch(tag, WireType::LengthDelimited)),
         };
-        if let Some(joined) = &mut self.joined {
-            joined.extend_from_slice(bytes);
-        } else if self.bytes.is_empty() {
-            self.bytes = bytes;
-            // The record's bytes end where `cur` now starts.
-            self.start = offset + before.len() - cur.len() - bytes.len();
-        } else if !bytes.is_empty() {
-            self.joined = Some([self.bytes, bytes].concat());
+        match &mut self.bytes {
+            PackedBytes::Borrowed([]) => self.bytes = PackedBytes::Borrowed(bytes),
+            _ if bytes.is_empty() => {}
+            PackedBytes::Borrowed(earlier) => {
+                let start = joined.len();
+                joined.extend_from_slice(earlier);
+                joined.extend_from_slice(bytes);
+                self.bytes = PackedBytes::Joined {
+                    start,
+                    end: joined.len(),
+                };
+            }
+            PackedBytes::Joined { start, end } => {
+                // The other field's records may have been joined since, after these.
+                if *end != joined.len() {
+                    let moved = joined.len();
+                    joined.extend_from_within(*start..*end);
+                    *start = moved;
+                }
+                joined.extend_from_slice(bytes);
+                *end = joined.len();
+            }
         }
         Ok(())
     }
 
-    fn finish(self, joined: &mut Vec<u8>) -> Result<Packed, DecodeError> {
-        Ok(if let Some(bytes) = self.joined {
-            let start = to_u32(joined.len())?;
-            joined.extend_from_slice(&bytes);
-            Packed {
-                start,
-                len: to_u32(bytes.len())?,
-                count: self.count,
-                joined: true,
-            }
-        } else {
-            Packed {
-                start: to_u32(self.start)?,
-                len: to_u32(self.bytes.len())?,
-                count: self.count,
-                joined: false,
-            }
-        })
+    pub(crate) fn is_empty(&self) -> bool {
+        self.count == 0
+    }
+
+    /// The values, from the tile or from `joined`, the buffer given when they were read.
+    pub(crate) fn iter<'s>(&self, joined: &'s [u8]) -> PackedU32<'s>
+    where
+        'a: 's,
+    {
+        let bytes = match self.bytes {
+            PackedBytes::Borrowed(bytes) => bytes,
+            PackedBytes::Joined { start, end } => &joined[start..end],
+        };
+        PackedU32 {
+            bytes,
+            remaining: self.count.into_usize(),
+        }
     }
 }
 
@@ -650,7 +707,7 @@ pub(crate) mod tests {
         assert_eq!(decoded.keys, ["k"]);
         assert_eq!(decoded.values, [MvtValueRef::UInt(5)]);
         assert_eq!(
-            decoded.tags_slice(&decoded.features[0]),
+            decoded.tags(&decoded.features[0]).collect::<Vec<_>>(),
             expected.layers[0].features[0].tags
         );
 
@@ -720,14 +777,29 @@ pub(crate) mod tests {
         let reader = MvtReaderRef::new(&tile).unwrap();
         let layer = reader.layers().next().unwrap();
         for (feature, proto) in layer.features().zip(&expected.layers[0].features) {
-            assert_eq!(feature.tags(), proto.tags);
-            assert_eq!(feature.geometry_commands(), proto.geometry);
+            assert!(feature.tags().eq(proto.tags.iter().copied()));
+            assert!(
+                feature
+                    .geometry_commands()
+                    .eq(proto.geometry.iter().copied())
+            );
             assert_eq!(
                 feature.geometry().unwrap(),
                 Geometry::MultiPoint(MultiPoint(vec![
                     point! { x: 2, y: 3 },
                     point! { x: 3, y: 4 }
                 ]))
+            );
+        }
+        let lazy = crate::MvtLazyReader::new(&tile).unwrap();
+        let lazy = lazy.layers().next().unwrap().decode().unwrap();
+        for (feature, proto) in lazy.features().zip(&expected.layers[0].features) {
+            let feature = feature.unwrap();
+            assert!(feature.tags().eq(proto.tags.iter().copied()));
+            assert!(
+                feature
+                    .geometry_commands()
+                    .eq(proto.geometry.iter().copied())
             );
         }
         let properties: Vec<_> = layer

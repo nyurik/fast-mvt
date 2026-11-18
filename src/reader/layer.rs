@@ -96,7 +96,7 @@ impl fmt::Debug for MvtLayerRef<'_> {
 fn keys_follow_first_use(layer: MvtLayerRef<'_>) -> bool {
     let mut next = 0;
     for feature in layer.features() {
-        for key in feature.tag_indices().step_by(2) {
+        for key in feature.tags().step_by(2) {
             let key = key as usize;
             if key > next {
                 return false;
