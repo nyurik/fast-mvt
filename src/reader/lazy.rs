@@ -14,7 +14,7 @@ use buffa::encoding::{Tag, WireType, check_wire_type, skip_field};
 use buffa::types::{borrow_bytes, borrow_str};
 
 use super::property::MvtPropertyIter;
-use super::wire::{FeatureFields, LayerItem, read_feature, read_layer};
+use super::wire::{FeatureData, LayerItem, read_feature, read_layer};
 use crate::generated::vector_tile::tile as proto_tile;
 use crate::geom_reader::decode_geometry;
 use crate::{DEFAULT_EXTENT, MvtError, MvtGeometry, MvtResult, MvtValueRef};
@@ -208,19 +208,14 @@ impl<'a> MvtLazyLayer<'a> {
 #[derive(Clone, Debug)]
 pub struct MvtLazyFeature<'l, 'a> {
     layer: &'l MvtLazyLayer<'a>,
-    fields: FeatureFields<'a>,
-    /// Packed fields written in several records, joined here; empty for nearly every feature.
-    joined: Vec<u8>,
+    fields: FeatureData<'a>,
 }
 
 impl<'l, 'a> MvtLazyFeature<'l, 'a> {
     fn decode(layer: &'l MvtLazyLayer<'a>, data: &'a [u8]) -> MvtResult<Self> {
-        let mut joined = Vec::new();
-        let fields = read_feature(data, &mut joined)?;
         Ok(Self {
             layer,
-            fields,
-            joined,
+            fields: read_feature(data)?,
         })
     }
 
@@ -248,7 +243,7 @@ impl<'l, 'a> MvtLazyFeature<'l, 'a> {
 
     /// The tags: key and value indices, alternating.
     pub fn tags(&self) -> impl ExactSizeIterator<Item = u32> + Clone + '_ {
-        self.fields.tags.iter(&self.joined)
+        self.fields.tags.iter()
     }
 
     #[must_use]
@@ -256,12 +251,12 @@ impl<'l, 'a> MvtLazyFeature<'l, 'a> {
         MvtPropertyIter::new(
             &self.layer.keys,
             &self.layer.values,
-            self.fields.tags.iter(&self.joined),
+            self.fields.tags.iter(),
         )
     }
 
     pub fn geometry_commands(&self) -> impl ExactSizeIterator<Item = u32> + Clone + '_ {
-        self.fields.geometry.iter(&self.joined)
+        self.fields.geometry.iter()
     }
 
     /// The geometry, as [`MvtFeatureRef::geometry`](crate::MvtFeatureRef::geometry) decodes it.

@@ -1,7 +1,7 @@
 use usize_cast::IntoUsize;
 
-use super::wire::PackedU32;
 use crate::{MvtError, MvtResult, MvtValueRef};
+use buffa::packed_view::{PackedIter, Uint32};
 
 /// A feature's properties: each tag's key and value, borrowed for `'t` from the layer they are in,
 /// and for `'a` from the tile.
@@ -9,14 +9,14 @@ use crate::{MvtError, MvtResult, MvtValueRef};
 pub struct MvtPropertyIter<'t, 'a> {
     keys: &'t [&'a str],
     values: &'t [MvtValueRef<'a>],
-    tags: PackedU32<'t>,
+    tags: PackedIter<'t, Uint32>,
 }
 
 impl<'t, 'a> MvtPropertyIter<'t, 'a> {
     pub(crate) fn new(
         keys: &'t [&'a str],
         values: &'t [MvtValueRef<'a>],
-        tags: PackedU32<'t>,
+        tags: PackedIter<'t, Uint32>,
     ) -> Self {
         Self { keys, values, tags }
     }

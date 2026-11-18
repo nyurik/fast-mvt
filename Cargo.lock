@@ -131,8 +131,7 @@ checksum = "3ded4057c258ba199e2d26386d3af3780957ecaee6c4ef4041c6b4b8b97c0b06"
 [[package]]
 name = "buffa"
 version = "0.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a92f2f5df67a9d5ccfc65237bfc954c56328aee40a04a9b92381ecba370be246"
+source = "git+https://github.com/nyurik/buffa?branch=packed-view-type#2836436e7c61b84fcc4b98b7365e8a76952499a0"
 dependencies = [
  "arbitrary",
  "base64",

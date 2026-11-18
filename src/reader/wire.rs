@@ -1,15 +1,14 @@
 //! Reads tiles with buffa's wire primitives, for both the eager and the lazy reader.
 //!
 //! Strings and the packed `tags` and `geometry` fields are borrowed from the tile bytes rather than
-//! decoded into vectors of each feature's own. The packed fields are checked when read, so iterating
-//! them later can not fail. The errors are those of the generated decoder, except that the eager
-//! reader's memory budget admits more of its smaller records.
+//! decoded into vectors of each feature's own: the packed fields are buffa's [`PackedView`]s,
+//! checked when read, so iterating them later can not fail. The errors are those of the generated
+//! decoder, except that the eager reader's memory budget admits more of its smaller records.
 
 use std::ops::Range;
 
-use buffa::encoding::{
-    Tag, WireType, check_wire_type, count_varints, skip_field_depth, wire_type_mismatch,
-};
+use buffa::encoding::{Tag, WireType, check_wire_type, skip_field_depth, wire_type_mismatch};
+use buffa::packed_view::{PackedView, Uint32};
 use buffa::types::{
     borrow_bytes, borrow_str, decode_bool, decode_double, decode_float, decode_int32, decode_int64,
     decode_sint64, decode_uint32, decode_uint64,
@@ -26,13 +25,11 @@ pub(crate) struct TileData<'a> {
     pub(crate) data: &'a [u8],
     pub(crate) layers: Vec<LayerData<'a>>,
     /// The features of every layer, in order.
-    features: Vec<FeatureData>,
+    features: Vec<FeatureData<'a>>,
     /// The keys of every layer, in order.
     keys: Vec<&'a str>,
     /// The values of every layer, in order.
     values: Vec<MvtValueRef<'a>>,
-    /// Packed fields written in several records, joined here as they can not be borrowed whole.
-    joined: Vec<u8>,
 }
 
 #[derive(Debug, Clone)]
@@ -45,27 +42,14 @@ pub(crate) struct LayerData<'a> {
     values: Range<u32>,
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct FeatureData {
+/// A feature message's fields, as both readers keep them.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct FeatureData<'a> {
     pub(crate) id: Option<u64>,
+    /// The last geometry type the enum knows, as the generated decoder keeps it.
     pub(crate) geom_type: Option<GeomType>,
-    tags: Packed,
-    geometry: Packed,
-}
-
-impl FeatureData {
-    pub(crate) fn has_tags(&self) -> bool {
-        self.tags.count > 0
-    }
-}
-
-/// Where a packed field's checked varints are: in the tile, or in [`TileData::joined`].
-#[derive(Debug, Clone, Copy, Default)]
-struct Packed {
-    start: u32,
-    len: u32,
-    count: u32,
-    joined: bool,
+    pub(crate) tags: PackedView<'a, Uint32>,
+    pub(crate) geometry: PackedView<'a, Uint32>,
 }
 
 impl<'a> TileData<'a> {
@@ -77,7 +61,6 @@ impl<'a> TileData<'a> {
             features: Vec::new(),
             keys: Vec::new(),
             values: Vec::new(),
-            joined: Vec::new(),
         };
         let mut budget = Budget(DEFAULT_ELEMENT_MEMORY_LIMIT);
         let mut cur = data;
@@ -128,38 +111,11 @@ impl<'a> TileData<'a> {
     /// without a call.
     #[inline(never)]
     fn add_feature(&mut self, buf: &'a [u8]) -> Result<(), DecodeError> {
-        let feature = read_feature(buf, &mut self.joined)?;
-        let data = FeatureData {
-            id: feature.id,
-            geom_type: feature.geom_type,
-            tags: self.place(feature.tags)?,
-            geometry: self.place(feature.geometry)?,
-        };
-        self.features.push(data);
+        self.features.push(read_feature(buf)?);
         Ok(())
     }
 
-    /// Where `field`'s varints are: in the tile if borrowed from it, or else in [`Self::joined`].
-    fn place(&self, field: PackedField<'a>) -> Result<Packed, DecodeError> {
-        let (start, len, joined) = match field.bytes {
-            PackedBytes::Borrowed([]) => return Ok(Packed::default()),
-            // The bytes are part of the tile, so their address is past its start.
-            PackedBytes::Borrowed(bytes) => (
-                bytes.as_ptr().addr() - self.data.as_ptr().addr(),
-                bytes.len(),
-                false,
-            ),
-            PackedBytes::Joined { start, end } => (start, end - start, true),
-        };
-        Ok(Packed {
-            start: to_u32(start)?,
-            len: to_u32(len)?,
-            count: field.count,
-            joined,
-        })
-    }
-
-    pub(crate) fn features(&self, layer: &LayerData<'_>) -> &[FeatureData] {
+    pub(crate) fn features(&self, layer: &LayerData<'_>) -> &[FeatureData<'a>] {
         &self.features[to_usize(&layer.features)]
     }
 
@@ -169,27 +125,6 @@ impl<'a> TileData<'a> {
 
     pub(crate) fn values(&self, layer: &LayerData<'_>) -> &[MvtValueRef<'a>] {
         &self.values[to_usize(&layer.values)]
-    }
-
-    pub(crate) fn tags(&self, feature: &FeatureData) -> PackedU32<'_> {
-        self.packed(feature.tags)
-    }
-
-    pub(crate) fn geometry(&self, feature: &FeatureData) -> PackedU32<'_> {
-        self.packed(feature.geometry)
-    }
-
-    fn packed(&self, packed: Packed) -> PackedU32<'_> {
-        let source = if packed.joined {
-            &self.joined
-        } else {
-            self.data
-        };
-        let start = packed.start.into_usize();
-        PackedU32 {
-            bytes: &source[start..start + packed.len.into_usize()],
-            remaining: packed.count.into_usize(),
-        }
     }
 }
 
@@ -252,24 +187,10 @@ pub(crate) fn read_layer<'a>(
     Ok(header)
 }
 
-/// A feature message's fields.
-#[derive(Debug, Clone, Copy, Default)]
-pub(crate) struct FeatureFields<'a> {
-    pub(crate) id: Option<u64>,
-    /// The last geometry type the enum knows, as the generated decoder keeps it.
-    pub(crate) geom_type: Option<GeomType>,
-    pub(crate) tags: PackedField<'a>,
-    pub(crate) geometry: PackedField<'a>,
-}
-
-/// Reads a feature message, checking its packed fields. Those written in several records are joined
-/// at the end of `joined`.
+/// Reads a feature message, checking its packed fields.
 #[inline]
-pub(crate) fn read_feature<'a>(
-    buf: &'a [u8],
-    joined: &mut Vec<u8>,
-) -> Result<FeatureFields<'a>, DecodeError> {
-    let mut feature = FeatureFields::default();
+pub(crate) fn read_feature(buf: &[u8]) -> Result<FeatureData<'_>, DecodeError> {
+    let mut feature = FeatureData::default();
     let mut cur = buf;
     while !cur.is_empty() {
         let tag = Tag::decode(&mut cur)?;
@@ -284,12 +205,29 @@ pub(crate) fn read_feature<'a>(
                     feature.geom_type = Some(geom_type);
                 }
             }
-            2 => feature.tags.read(tag, &mut cur, joined)?,
-            4 => feature.geometry.read(tag, &mut cur, joined)?,
+            2 => read_packed(tag, &mut cur, &mut feature.tags)?,
+            4 => read_packed(tag, &mut cur, &mut feature.geometry)?,
             _ => skip_field_depth(tag, &mut cur, RECURSION_LIMIT - 2)?,
         }
     }
     Ok(feature)
+}
+
+/// Reads a record of a packed `uint32` field into `field`, packed or not.
+fn read_packed<'a>(
+    tag: Tag,
+    cur: &mut &'a [u8],
+    field: &mut PackedView<'a, Uint32>,
+) -> Result<(), DecodeError> {
+    match tag.wire_type() {
+        WireType::LengthDelimited => field.extend_packed(read_bytes(cur)?),
+        // A single element, not packed.
+        WireType::Varint => {
+            field.push(decode_uint32(cur)?);
+            Ok(())
+        }
+        _ => Err(wire_type_mismatch(tag, WireType::LengthDelimited)),
+    }
 }
 
 /// The value a `Value` message holds, as the first of its fields set in the order they are
@@ -356,137 +294,6 @@ fn read_value(buf: &[u8]) -> Result<MvtValueRef<'_>, DecodeError> {
     })
 }
 
-/// A packed `uint32` field of a feature: its checked varints, and how many there are.
-#[derive(Debug, Clone, Copy, Default)]
-pub(crate) struct PackedField<'a> {
-    bytes: PackedBytes<'a>,
-    count: u32,
-}
-
-/// Where a packed field's varints are. A field is usually one packed record, borrowed as is;
-/// anything else is joined into one run of varints in a buffer of the reader's.
-#[derive(Debug, Clone, Copy)]
-enum PackedBytes<'a> {
-    Borrowed(&'a [u8]),
-    Joined { start: usize, end: usize },
-}
-
-impl Default for PackedBytes<'_> {
-    fn default() -> Self {
-        Self::Borrowed(&[])
-    }
-}
-
-impl<'a> PackedField<'a> {
-    /// Reads a record of the field from `cur`, packed or not, joining it to the earlier ones at
-    /// the end of `joined`.
-    fn read(
-        &mut self,
-        tag: Tag,
-        cur: &mut &'a [u8],
-        joined: &mut Vec<u8>,
-    ) -> Result<(), DecodeError> {
-        let before = *cur;
-        let bytes = match tag.wire_type() {
-            WireType::LengthDelimited => {
-                let payload = read_bytes(cur)?;
-                self.count += check_varints(payload)?;
-                payload
-            }
-            // A single element, not packed.
-            WireType::Varint => {
-                decode_uint32(cur)?;
-                self.count += 1;
-                &before[..before.len() - cur.len()]
-            }
-            _ => return Err(wire_type_mismatch(tag, WireType::LengthDelimited)),
-        };
-        match &mut self.bytes {
-            PackedBytes::Borrowed([]) => self.bytes = PackedBytes::Borrowed(bytes),
-            _ if bytes.is_empty() => {}
-            PackedBytes::Borrowed(earlier) => {
-                let start = joined.len();
-                joined.extend_from_slice(earlier);
-                joined.extend_from_slice(bytes);
-                self.bytes = PackedBytes::Joined {
-                    start,
-                    end: joined.len(),
-                };
-            }
-            PackedBytes::Joined { start, end } => {
-                // The other field's records may have been joined since, after these.
-                if *end != joined.len() {
-                    let moved = joined.len();
-                    joined.extend_from_within(*start..*end);
-                    *start = moved;
-                }
-                joined.extend_from_slice(bytes);
-                *end = joined.len();
-            }
-        }
-        Ok(())
-    }
-
-    pub(crate) fn is_empty(&self) -> bool {
-        self.count == 0
-    }
-
-    /// The values, from the tile or from `joined`, the buffer given when they were read.
-    pub(crate) fn iter<'s>(&self, joined: &'s [u8]) -> PackedU32<'s>
-    where
-        'a: 's,
-    {
-        let bytes = match self.bytes {
-            PackedBytes::Borrowed(bytes) => bytes,
-            PackedBytes::Joined { start, end } => &joined[start..end],
-        };
-        PackedU32 {
-            bytes,
-            remaining: self.count.into_usize(),
-        }
-    }
-}
-
-/// Checks that `payload` is a run of varints as `uint32` decoding accepts them, and counts them.
-fn check_varints(payload: &[u8]) -> Result<u32, DecodeError> {
-    match payload.last() {
-        None => return Ok(0),
-        // An unterminated last varint: decoding each one finds the error the generated decoder does,
-        // at the latest when no bytes are left.
-        Some(&last) if last >= 0x80 => {
-            let mut cur = payload;
-            loop {
-                decode_uint32(&mut cur)?;
-            }
-        }
-        Some(_) => {}
-    }
-    // A varint is at most 10 bytes: 9 continuation bytes, then one holding only the 64th bit. Any
-    // run of 9 continuation bytes covers one of every 9 bytes, so only those few are looked at.
-    let mut idx = 8;
-    while let Some(&byte) = payload.get(idx) {
-        if byte < 0x80 {
-            idx += 9;
-            continue;
-        }
-        let start = payload[..idx]
-            .iter()
-            .rposition(|&byte| byte < 0x80)
-            .map_or(0, |pos| pos + 1);
-        // The last byte ends a varint, so there is an end.
-        let end = idx
-            + payload[idx..]
-                .iter()
-                .take_while(|&&byte| byte >= 0x80)
-                .count();
-        if end - start >= 10 || (end - start == 9 && payload[end] > 1) {
-            return Err(DecodeError::VarintTooLong);
-        }
-        idx = end + 9;
-    }
-    to_u32(count_varints(payload))
-}
-
 /// Borrows a length-delimited field, with a fast path for the usual one-byte length.
 fn read_bytes<'a>(cur: &mut &'a [u8]) -> Result<&'a [u8], DecodeError> {
     if let Some((&len, rest)) = cur.split_first() {
@@ -499,47 +306,6 @@ fn read_bytes<'a>(cur: &mut &'a [u8]) -> Result<&'a [u8], DecodeError> {
     }
     borrow_bytes(cur)
 }
-
-/// The varints of a checked packed field, decoded as `uint32` values.
-#[derive(Debug, Clone)]
-pub(crate) struct PackedU32<'a> {
-    bytes: &'a [u8],
-    remaining: usize,
-}
-
-impl Iterator for PackedU32<'_> {
-    type Item = u32;
-
-    fn next(&mut self) -> Option<u32> {
-        let (&first, mut rest) = self.bytes.split_first()?;
-        self.remaining -= 1;
-        if first < 0x80 {
-            self.bytes = rest;
-            return Some(u32::from(first));
-        }
-        // A `uint32` keeps the low 32 bits of a longer varint.
-        let mut value = u32::from(first & 0x7f);
-        let mut shift = 7;
-        while let Some((&byte, tail)) = rest.split_first() {
-            rest = tail;
-            if shift < 32 {
-                value |= u32::from(byte & 0x7f) << shift;
-            }
-            if byte < 0x80 {
-                break;
-            }
-            shift += 7;
-        }
-        self.bytes = rest;
-        Some(value)
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.remaining, Some(self.remaining))
-    }
-}
-
-impl ExactSizeIterator for PackedU32<'_> {}
 
 /// What is left of the memory the decoded tile may take, with the generated decoder's limit.
 struct Budget(usize);
@@ -606,63 +372,6 @@ pub(crate) mod tests {
         tile_of_layer(&fields)
     }
 
-    /// The number of varints in `payload`, decoding each one as the generated decoder does.
-    fn decode_each(payload: &[u8]) -> Result<u32, DecodeError> {
-        let mut cur = payload;
-        let mut count = 0;
-        while !cur.is_empty() {
-            decode_uint32(&mut cur)?;
-            count += 1;
-        }
-        Ok(count)
-    }
-
-    fn decode(bytes: &[u8]) -> Vec<u32> {
-        let count = check_varints(bytes).unwrap();
-        let values: Vec<_> = PackedU32 {
-            bytes,
-            remaining: count.into_usize(),
-        }
-        .collect();
-        assert_eq!(values.len(), count.into_usize());
-        values
-    }
-
-    #[test]
-    fn packed_varints_decode_like_uint32() {
-        assert_eq!(decode(&[]), Vec::<u32>::new());
-        assert_eq!(decode(&[0, 1, 0x7f]), [0, 1, 0x7f]);
-        assert_eq!(decode(&[0x80, 0x01, 0xac, 0x02]), [128, 300]);
-        assert_eq!(decode(&[0xff, 0xff, 0xff, 0xff, 0x0f]), [u32::MAX]);
-        // Longer varints keep their low 32 bits, as for a negative `int32` written as `uint32`.
-        let minus_one = [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01];
-        assert_eq!(decode(&minus_one), [u32::MAX]);
-        assert_eq!(decode(&[0x80, 0x80, 0x80, 0x80, 0x80, 0x01, 5]), [0, 5]);
-    }
-
-    /// Runs of continuation bytes of every length up to too long, at every offset from the bytes
-    /// `check_varints` samples, ended or not, check as decoding each varint does.
-    #[test]
-    fn packed_varint_checks_match_decoding_each() {
-        for before in 0..10 {
-            for run in 0..12 {
-                for last in [None, Some(0x00), Some(0x01), Some(0x02), Some(0x7f)] {
-                    for after in 0..3 {
-                        let mut payload = vec![0x01; before];
-                        payload.extend(std::iter::repeat_n(0xff, run));
-                        payload.extend(last);
-                        payload.extend(std::iter::repeat_n(0x01, after));
-                        assert_eq!(
-                            check_varints(&payload),
-                            decode_each(&payload),
-                            "{payload:x?}"
-                        );
-                    }
-                }
-            }
-        }
-    }
-
     /// Length-delimited fields of every length class, whole or cut short, are borrowed as buffa
     /// borrows them.
     #[test]
@@ -707,7 +416,7 @@ pub(crate) mod tests {
         assert_eq!(decoded.keys, ["k"]);
         assert_eq!(decoded.values, [MvtValueRef::UInt(5)]);
         assert_eq!(
-            decoded.tags(&decoded.features[0]).collect::<Vec<_>>(),
+            decoded.features[0].tags.to_vec(),
             expected.layers[0].features[0].tags
         );
 

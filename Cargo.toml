@@ -128,3 +128,7 @@ debug = true
 
 [lints]
 workspace = true
+
+# buffa's PackedView (anthropics/buffa#815), until it is released.
+[patch.crates-io]
+buffa = { git = "https://github.com/nyurik/buffa", branch = "packed-view-type" }
