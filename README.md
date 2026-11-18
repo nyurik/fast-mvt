@@ -225,18 +225,18 @@ Encoding from an already parsed integer tile model:
 
 | Encoder                                | Time    | Throughput  | Compare     |
 |----------------------------------------|---------|-------------|-------------|
-| `fast-mvt`                             | 7.3 ms  | 117.9 MiB/s | -           |
-| `tinymvt 0.3.0`                        | 14.1 ms | 60.9 MiB/s  | 1.9x slower |
-| `mvt 0.15.0`                           | 23.5 ms | 36.5 MiB/s  | 3.2x slower |
+| `fast-mvt`                             | 4.7 ms  | 182.4 MiB/s | -           |
+| `tinymvt 0.3.0`                        | 11.9 ms | 72.2 MiB/s  | 2.5x slower |
+| `mvt 0.15.0`                           | 19.7 ms | 43.5 MiB/s  | 4.2x slower |
 | `mvt-reader` <br/>encode not supported | n/a     | n/a         | n/a         |
 
 Encoding from an owned tile value. Note that "owned" benchmark includes deep-cloning of each tile, so it makes no sense to compare throughput between the owned vs referenced table above, only between different encoders.
 
 | Encoder                                | Time    | Throughput | Compare     |
 |----------------------------------------|---------|------------|-------------|
-| `fast-mvt`                             | 14.7 ms | 58.2 MiB/s | -           |
-| `tinymvt 0.3.0`                        | 23.1 ms | 37.1 MiB/s | 1.6x slower |
-| `mvt 0.15.0`                           | 32.8 ms | 26.1 MiB/s | 2.2x slower |
+| `fast-mvt`                             | 11.1 ms | 77.4 MiB/s | -           |
+| `tinymvt 0.3.0`                        | 18.8 ms | 45.7 MiB/s | 1.7x slower |
+| `mvt 0.15.0`                           | 25.9 ms | 33.1 MiB/s | 2.3x slower |
 | `mvt-reader` <br/>encode not supported | n/a     | n/a        | n/a         |
 
 #### CPU instructions
@@ -254,9 +254,9 @@ work as the tables above with Callgrind, which is deterministic, unlike the time
 
 | Encoder         | From a parsed tile | Compare   | From an owned tile | Compare   |
 |-----------------|--------------------|-----------|--------------------|-----------|
-| `fast-mvt`      | 63.1 M             | -         | 133.2 M            | -         |
-| `tinymvt 0.3.0` | 113.6 M            | 1.8x more | 184.0 M            | 1.4x more |
-| `mvt 0.15.0`    | 202.5 M            | 3.2x more | 272.4 M            | 2.0x more |
+| `fast-mvt`      | 38.6 M             | -         | 108.5 M            | -         |
+| `tinymvt 0.3.0` | 113.6 M            | 2.9x more | 184.0 M            | 1.7x more |
+| `mvt 0.15.0`    | 202.5 M            | 5.2x more | 272.4 M            | 2.5x more |
 
 ## Features
 
