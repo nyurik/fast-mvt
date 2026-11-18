@@ -74,8 +74,7 @@ fn count_vertices(bytes: &[u8], layer_name: &str) -> MvtResult<usize> {
     let mut vertices = 0;
     for feature in layer.features() {
         // MoveTo and LineTo commands are followed by two parameters per vertex.
-        let commands = feature?.geometry_commands().collect::<MvtResult<Vec<u32>>>()?;
-        vertices += commands.len() / 2;
+        vertices += feature?.geometry_commands().len() / 2;
     }
     Ok(vertices)
 }
@@ -247,10 +246,10 @@ work as the tables above with Callgrind, which is deterministic, unlike the time
 
 | Decoder              | Instructions | Compare   |
 |----------------------|--------------|-----------|
-| `fast-mvt`           | 867 M        | -         |
-| `fast-mvt`, lazy     | 868 M        | 1.0x      |
-| `tinymvt 0.3.0`      | 1,696 M      | 2.0x more |
-| `mvt-reader 2.3.0`   | 4,432 M      | 5.1x more |
+| `fast-mvt`           | 593 M        | -         |
+| `fast-mvt`, lazy     | 640 M        | 1.1x more |
+| `tinymvt 0.3.0`      | 1,696 M      | 2.9x more |
+| `mvt-reader 2.3.0`   | 4,432 M      | 7.5x more |
 
 | Encoder         | From a parsed tile | Compare   | From an owned tile | Compare   |
 |-----------------|--------------------|-----------|--------------------|-----------|
