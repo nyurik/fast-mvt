@@ -19,6 +19,7 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with: { submodules: true }
@@ -35,6 +36,7 @@ jobs:
   test-msrv:
     name: Test MSRV
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: taiki-e/install-action@v2.90.2
@@ -55,6 +57,7 @@ jobs:
     name: Code Coverage
     if: github.event_name != 'release'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with: { submodules: true }
@@ -73,6 +76,7 @@ jobs:
     name: Copy/Paste Detection
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       pull-requests: write
@@ -102,6 +106,7 @@ jobs:
     needs: [ test, test-msrv ]
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Result of the needed steps
         run: echo "${{ toJSON(needs) }}"
@@ -118,6 +123,7 @@ jobs:
       && github.ref == 'refs/heads/main'
       && github.repository_owner == 'nyurik'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
       id-token: write
@@ -160,6 +166,7 @@ jobs:
       )
     name: Upload ${{ matrix.target }} binary
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     permissions:
       contents: write
     strategy:
